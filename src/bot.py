@@ -1,9 +1,10 @@
+from datetime import datetime, timedelta
 import logging
 import requests
 import json
 
 from telegram import TelegramError
-from telegram.ext import Updater, CommandHandler, CallbackContext
+from telegram.ext import Updater, CommandHandler
 from bs4 import BeautifulSoup
 
 from config.auth import token
@@ -11,6 +12,8 @@ from config.persistence import persistence
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger('CatalogoFCFMBot')
+
+last_check_time = datetime.now()
 
 data = {}  # Lista de cursos de última consulta
 new_data = {}  # Lista de cursos de nueva consulta
@@ -179,6 +182,7 @@ def parse_catalog():
 
 def check_catalog(context):
     logger.info("Looking for changes...")
+    last_check_time = datetime.now()
     global data, new_data
     new_data = parse_catalog()
 
@@ -264,16 +268,23 @@ def notify_changes(added, deleted, modified, context):
 
 def start(update, context):
     logger.info('Start from chat ' + str(update.message.chat_id))
-    context.chat_data["enable"] = True
-    context.bot.send_message(
-        chat_id=update.message.chat_id,
-        text="A partir de ahora avisaré por este chat si detecto algún cambio en el catálogo de cursos."
-    )
-    context.bot.send_message(
-        chat_id=update.message.chat_id,
-        text="Por ahora solo funciono con cursos de Computación, pero estoy aprendiendo a revisar "
-             "cursos de otros departamentos \U0001F913\U0001F4DA"
-    )
+    if context.chat_data.get("enable", False):
+        context.bot.send_message(
+            chat_id=update.message.chat_id,
+            text="¡Mis avisos para este chat ya están activados! El próximo chequeo será apróximadamente a las " +
+                 (last_check_time + timedelta(seconds=900)).strftime("%H:%M")
+        )
+    else:
+        context.chat_data["enable"] = True
+        context.bot.send_message(
+            chat_id=update.message.chat_id,
+            text="A partir de ahora avisaré por este chat si detecto algún cambio en el catálogo de cursos."
+        )
+        context.bot.send_message(
+            chat_id=update.message.chat_id,
+            text="Por ahora solo funciono con cursos de Computación, pero estoy aprendiendo a revisar "
+                 "cursos de otros departamentos \U0001F913\U0001F4DA"
+        )
 
 
 def stop(update, context):
