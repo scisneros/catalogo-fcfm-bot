@@ -1,6 +1,7 @@
 __pycache__/
 /excluded/
 /db
+/bot.log
 src/config/auth.py
 
 .idea/
