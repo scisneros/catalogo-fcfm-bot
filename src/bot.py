@@ -1,6 +1,4 @@
 import logging
-import time
-import schedule
 import requests
 import json
 
@@ -265,7 +263,7 @@ def notify_changes(added, deleted, modified, context):
 
 
 def start(update, context):
-    logger.info('New start from chat ' + str(update.message.chat_id))
+    logger.info('Start from chat ' + str(update.message.chat_id))
     context.chat_data["enable"] = True
     context.bot.send_message(
         chat_id=update.message.chat_id,
@@ -273,8 +271,18 @@ def start(update, context):
     )
     context.bot.send_message(
         chat_id=update.message.chat_id,
-        text="Te recuerdo que actualmente solo funciono con los cursos de Computación. Pronto podrás configurarme "
-             "para otros departamentos \U0001F601"
+        text="Por ahora solo funciono con cursos de Computación, pero estoy aprendiendo a revisar "
+             "cursos de otros departamentos \U0001F913\U0001F4DA"
+    )
+
+
+def stop(update, context):
+    logger.info('Stop from chat ' + str(update.message.chat_id))
+    context.chat_data["enable"] = False
+    context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text="Ok, dejaré de avisar cambios en el catálogo por este chat."
+             "Puedes volver a activar los avisos enviándome /start nuevamente."
     )
 
 
@@ -283,11 +291,12 @@ def main():
     dp = updater.dispatcher
     jq = updater.job_queue
     dp.add_handler(CommandHandler('start', start))
+    dp.add_handler(CommandHandler('stop', stop))
 
     global data
     data = parse_catalog()
 
-    jq.run_repeating(check_catalog, interval=60, context=dp.chat_data)
+    jq.run_repeating(check_catalog, interval=900, context=dp.chat_data)
 
     updater.start_polling()
     updater.idle()
