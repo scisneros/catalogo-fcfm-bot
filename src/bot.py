@@ -3,12 +3,12 @@ import logging
 import requests
 import json
 
-from telegram import TelegramError
 from telegram.ext import Updater, CommandHandler
 from bs4 import BeautifulSoup
 
 from config.auth import token
 from config.persistence import persistence
+from utils import *
 
 logging.basicConfig(filename='../bot.log',
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -23,135 +23,31 @@ new_data = {}  # Lista de cursos de nueva consulta
 
 # Ejemplo de estructura de data:
 # data = {"CC3001": {nombre: "Algoritmos y Estructuras de Datos",
-#                    secciones: [{profesor: ["Jérémy Barbay"],
-#                                 cupos: "90",
-#                                 horario: {catedra: ["Martes 10:15 - 11:45",
-#                                          "Jueves 10:15 - 11:45"],
-#                                           auxiliar: ["Viernes 14:30 - 16:00"]}
-#                                },
-#                                {profesor: ["Patricio Poblete",
-#                                            "Nelson Baloian T."],
-#                                 cupos: "90",
-#                                 horario: {catedra: ["Lunes 14:30 - 16:00",
-#                                                     "Miércoles 14:30 - 16:00"],
-#                                           auxiliar: ["Viernes 14:30 - 16:00"],
-#                                           control: [
-#                                                     ["Jueves 18:00 - 19:30"]
-#                                                     ["8", "14"]  # Semanas
-#                                                    ]}
-#                                }
-#                               ]
+#                    secciones: {"1": {profesor: ["Jérémy Barbay"],
+#                                      cupos: "90",
+#                                      horario: {catedra: ["Martes 10:15 - 11:45",
+#                                                          "Jueves 10:15 - 11:45"],
+#                                                auxiliar: ["Viernes 14:30 - 16:00"]}
+#                                     }
+#                               },
+#                               {"2": {profesor: ["Patricio Poblete",
+#                                                 "Nelson Baloian T."],
+#                                      cupos: "90",
+#                                      horario: {catedra: ["Lunes 14:30 - 16:00",
+#                                                          "Miércoles 14:30 - 16:00"],
+#                                                auxiliar: ["Viernes 14:30 - 16:00"],
+#                                                control: [
+#                                                          ["Jueves 18:00 - 19:30"]
+#                                                          ["8", "14"]  # Semanas
+#                                                         ]}
+#                                     }
+#                               }
 #                   },
 #         "CC3002": {nombre: "Metodologías de Diseño y Programación",
 #                     ...
 #                   }
 #        }
 #
-
-
-def full_strip(st):
-    return st.replace("\n", "").replace("\t", "").strip(" ")
-
-
-def parse_horario(horarios_str):
-    result = {"catedra": [],
-              "auxiliar": [],
-              "control": [[], []]}
-    for el in horarios_str:
-        if not isinstance(el, str):
-            continue
-        el = full_strip(el)
-        if el.startswith("Cátedra"):
-            result["catedra"] = el.lstrip("Cátedra: ").split(", ")
-        elif el.startswith("Auxiliar"):
-            result["auxiliar"] = el.lstrip("Auxiliar: ").split(", ")
-        elif el.startswith("Control"):
-            controlsplit = el.split(", Semana: ")
-            result["control"][0] = controlsplit[0].lstrip("Control: ").split(", ")
-            result["control"][1] = controlsplit[1].split(", ")
-    return result
-
-
-def changes_to_string(added, deleted, modified):
-    changes_str = ""
-    if len(added) > 0:
-        changes_str += "\n<i>Cursos añadidos:</i>\n"
-        for curso_id in added:
-            curso = new_data[curso_id]
-            changes_str += "\U0001F4D7 <b>{} {}</b>\n".format(curso_id, curso["nombre"])
-            for seccion_id in curso["secciones"]:
-                seccion = curso["secciones"][seccion_id]
-                profs = ", ".join(seccion["profesores"])
-                changes_str += "    S{} - {} - {} cupos\n".format(seccion_id, profs, seccion["cupos"])
-                changes_str += horarios_to_string(seccion["horarios"], 8)
-    if len(deleted) > 0:
-        changes_str += "\n<i>Cursos eliminados:</i>\n"
-        for curso_id in deleted:
-            curso = data[curso_id]
-            changes_str += "\U0001F4D9 <b>{} {}</b>\n".format(curso_id, curso["nombre"])
-    if len(modified) > 0:
-        changes_str += "\n<i>Cursos modificados:</i>\n"
-        for curso_id in modified:
-            curso_mods = modified[curso_id]
-            if "nombre" in curso_mods:
-                changes_str += "\U0001F4D8 <b>{}</b> _{}_\n_Renombrado:_ <b>{}</b>".format(curso_id,
-                                                                                           curso_mods["nombre"][0],
-                                                                                           curso_mods["nombre"][1])
-            else:
-                changes_str += "\U0001F4D8 <b>{} {}</b>\n".format(curso_id, new_data[curso_id]["nombre"])
-            if "secciones" in curso_mods:
-                if "added" in curso_mods["secciones"]:
-                    changes_str += "    <i>Secciones añadidas:</i>\n"
-                    for seccion_id in curso_mods["secciones"]["added"]:
-                        seccion = new_data[curso_id]["secciones"][seccion_id]
-                        profs = ", ".join(seccion["profesores"])
-                        changes_str += "    \U00002795 Secc. {} - {} - {} cupos\n".format(seccion_id, profs,
-                                                                                          seccion["cupos"])
-                        changes_str += horarios_to_string(seccion["horarios"], 8)
-                if "deleted" in curso_mods["secciones"]:
-                    changes_str += "    <i>Secciones eliminadas:</i>\n"
-                    for seccion_id in curso_mods["secciones"]["deleted"]:
-                        seccion = new_data[curso_id]["secciones"][seccion_id]
-                        profs = ", ".join(seccion["profesores"])
-                        changes_str += "    \U00002796 Secc. {} - {}\n".format(seccion_id, profs)
-                if "modified" in curso_mods["secciones"]:
-                    changes_str += "    <i>Secciones modificadas:</i>\n"
-                    for seccion_id in curso_mods["secciones"]["modified"]:
-                        seccion_mods = curso_mods["secciones"]["modified"][seccion_id]
-                        if "profesores" in seccion_mods:
-                            changes_str += "    \U00003030 <b>Sección {}</b>\n".format(seccion_id)
-                            changes_str += "        Cambia profesor\n".format(seccion_id)
-                            changes_str += "        \U00002013 de: <i>{}</i>\n".format(
-                                ", ".join(seccion_mods["profesores"][0]))
-                            changes_str += "        \U00002013 a: <i>{}</i>\n".format(
-                                ", ".join(seccion_mods["profesores"][1]))
-                        else:
-                            profs = ", ".join(new_data[curso_id]["secciones"][seccion_id]["profesores"])
-                            changes_str += "    \U00003030 <b>Sección {}</b> - {}\n".format(seccion_id, profs)
-                        if "cupos" in seccion_mods:
-                            changes_str += "        Cambia cupos\n".format(seccion_id)
-                            changes_str += "        \U00002013 de: <i>{}</i>\n".format(seccion_mods["cupos"][0])
-                            changes_str += "        \U00002013 a: <b>{}</b>\n".format(seccion_mods["cupos"][1])
-                        if "horarios" in seccion_mods:
-                            changes_str += "        Cambia horario\n".format(seccion_id)
-                            changes_str += "        \U00002013 de:\n{}".format(
-                                horarios_to_string(seccion_mods["horarios"][0], 8))
-                            changes_str += "        \U00002013 a:\n{}".format(
-                                horarios_to_string(seccion_mods["horarios"][1], 8))
-    return changes_str
-
-
-def horarios_to_string(horarios, indent):
-    result = ""
-    if len(horarios["catedra"]) > 0:
-        result += (" " * indent) + "<i>Cátedra: {}</i>\n".format(", ".join(horarios["catedra"]))
-    if len(horarios["auxiliar"]) > 0:
-        result += (" " * indent) + "<i>Auxiliar: {}</i>\n".format(", ".join(horarios["auxiliar"]))
-    if len(horarios["control"][0]) > 0:
-        result += (" " * indent) + "<i>Control: {}</i>\n".format(", ".join(horarios["control"][0]))
-    if len(horarios["control"][1]) > 0:
-        result += (" " * indent) + "<i>Semanas {}</i>\n".format(", ".join(horarios["control"][1]))
-    return result
 
 
 def parse_catalog():
@@ -248,6 +144,75 @@ def check_catalog(context):
     data = new_data
 
 
+def changes_to_string(added, deleted, modified):
+    changes_str = ""
+    if len(added) > 0:
+        changes_str += "\n<i>Cursos añadidos:</i>\n"
+        for curso_id in added:
+            curso = new_data[curso_id]
+            changes_str += "\U0001F4D7 <b>{} {}</b>\n".format(curso_id, curso["nombre"])
+            for seccion_id in curso["secciones"]:
+                seccion = curso["secciones"][seccion_id]
+                profs = ", ".join(seccion["profesores"])
+                changes_str += "    S{} - {} - {} cupos\n".format(seccion_id, profs, seccion["cupos"])
+                changes_str += horarios_to_string(seccion["horarios"], 8)
+    if len(deleted) > 0:
+        changes_str += "\n<i>Cursos eliminados:</i>\n"
+        for curso_id in deleted:
+            curso = data[curso_id]
+            changes_str += "\U0001F4D9 <b>{} {}</b>\n".format(curso_id, curso["nombre"])
+    if len(modified) > 0:
+        changes_str += "\n<i>Cursos modificados:</i>\n"
+        for curso_id in modified:
+            curso_mods = modified[curso_id]
+            if "nombre" in curso_mods:
+                changes_str += "\U0001F4D8 <b>{}</b> _{}_\n_Renombrado:_ <b>{}</b>".format(curso_id,
+                                                                                           curso_mods["nombre"][0],
+                                                                                           curso_mods["nombre"][1])
+            else:
+                changes_str += "\U0001F4D8 <b>{} {}</b>\n".format(curso_id, new_data[curso_id]["nombre"])
+            if "secciones" in curso_mods:
+                if "added" in curso_mods["secciones"]:
+                    changes_str += "    <i>Secciones añadidas:</i>\n"
+                    for seccion_id in curso_mods["secciones"]["added"]:
+                        seccion = new_data[curso_id]["secciones"][seccion_id]
+                        profs = ", ".join(seccion["profesores"])
+                        changes_str += "    \U00002795 Secc. {} - {} - {} cupos\n".format(seccion_id, profs,
+                                                                                          seccion["cupos"])
+                        changes_str += horarios_to_string(seccion["horarios"], 8)
+                if "deleted" in curso_mods["secciones"]:
+                    changes_str += "    <i>Secciones eliminadas:</i>\n"
+                    for seccion_id in curso_mods["secciones"]["deleted"]:
+                        seccion = new_data[curso_id]["secciones"][seccion_id]
+                        profs = ", ".join(seccion["profesores"])
+                        changes_str += "    \U00002796 Secc. {} - {}\n".format(seccion_id, profs)
+                if "modified" in curso_mods["secciones"]:
+                    changes_str += "    <i>Secciones modificadas:</i>\n"
+                    for seccion_id in curso_mods["secciones"]["modified"]:
+                        seccion_mods = curso_mods["secciones"]["modified"][seccion_id]
+                        if "profesores" in seccion_mods:
+                            changes_str += "    \U00003030 <b>Sección {}</b>\n".format(seccion_id)
+                            changes_str += "        Cambia profesor\n".format(seccion_id)
+                            changes_str += "        \U00002013 de: <i>{}</i>\n".format(
+                                ", ".join(seccion_mods["profesores"][0]))
+                            changes_str += "        \U00002013 a: <i>{}</i>\n".format(
+                                ", ".join(seccion_mods["profesores"][1]))
+                        else:
+                            profs = ", ".join(new_data[curso_id]["secciones"][seccion_id]["profesores"])
+                            changes_str += "    \U00003030 <b>Sección {}</b> - {}\n".format(seccion_id, profs)
+                        if "cupos" in seccion_mods:
+                            changes_str += "        Cambia cupos\n".format(seccion_id)
+                            changes_str += "        \U00002013 de: <i>{}</i>\n".format(seccion_mods["cupos"][0])
+                            changes_str += "        \U00002013 a: <b>{}</b>\n".format(seccion_mods["cupos"][1])
+                        if "horarios" in seccion_mods:
+                            changes_str += "        Cambia horario\n".format(seccion_id)
+                            changes_str += "        \U00002013 de:\n{}".format(
+                                horarios_to_string(seccion_mods["horarios"][0], 8))
+                            changes_str += "        \U00002013 a:\n{}".format(
+                                horarios_to_string(seccion_mods["horarios"][1], 8))
+    return changes_str
+
+
 def notify_changes(added, deleted, modified, context):
     chats_data = context.job.context
 
@@ -265,20 +230,6 @@ def notify_changes(added, deleted, modified, context):
                     parse_mode="HTML",
                     disable_web_page_preview=True
                     )
-
-
-def try_msg(bot, attempts=3, **params):
-    chat_id = params["chat_id"]
-    for attempt in range(attempts):
-        try:
-            bot.send_message(**params)
-        except TelegramError as e:
-            logger.error("[Attempt %s/%s] Messaging chat %s raised following error: %s",
-                         str(attempt), str(attempts), str(chat_id), str(e))
-        else:
-            break
-    else:
-        logger.error("Max attempts reached for chat %s. Aborting message.", str(chat_id))
 
 
 def start(update, context):
