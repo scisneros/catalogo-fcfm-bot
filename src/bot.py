@@ -10,7 +10,9 @@ from bs4 import BeautifulSoup
 from config.auth import token
 from config.persistence import persistence
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(filename='../bot.log',
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    level=logging.INFO)
 logger = logging.getLogger('CatalogoFCFMBot')
 
 last_check_time = datetime.now()
@@ -93,8 +95,8 @@ def changes_to_string(added, deleted, modified):
             curso_mods = modified[curso_id]
             if "nombre" in curso_mods:
                 changes_str += "\U0001F4D8 <b>{}</b> _{}_\n_Renombrado:_ <b>{}</b>".format(curso_id,
-                                                                                 curso_mods["nombre"][0],
-                                                                                 curso_mods["nombre"][1])
+                                                                                           curso_mods["nombre"][0],
+                                                                                           curso_mods["nombre"][1])
             else:
                 changes_str += "\U0001F4D8 <b>{} {}</b>\n".format(curso_id, new_data[curso_id]["nombre"])
             if "secciones" in curso_mods:
@@ -119,8 +121,10 @@ def changes_to_string(added, deleted, modified):
                         if "profesores" in seccion_mods:
                             changes_str += "    \U00003030 <b>Sección {}</b>\n".format(seccion_id)
                             changes_str += "        Cambia profesor\n".format(seccion_id)
-                            changes_str += "        \U00002013 de: <i>{}</i>\n".format(", ".join(seccion_mods["profesores"][0]))
-                            changes_str += "        \U00002013 a: <i>{}</i>\n".format(", ".join(seccion_mods["profesores"][1]))
+                            changes_str += "        \U00002013 de: <i>{}</i>\n".format(
+                                ", ".join(seccion_mods["profesores"][0]))
+                            changes_str += "        \U00002013 a: <i>{}</i>\n".format(
+                                ", ".join(seccion_mods["profesores"][1]))
                         else:
                             profs = ", ".join(new_data[curso_id]["secciones"][seccion_id]["profesores"])
                             changes_str += "    \U00003030 <b>Sección {}</b> - {}\n".format(seccion_id, profs)
@@ -140,13 +144,13 @@ def changes_to_string(added, deleted, modified):
 def horarios_to_string(horarios, indent):
     result = ""
     if len(horarios["catedra"]) > 0:
-        result += (" "*indent) + "<i>Cátedra: {}</i>\n".format(", ".join(horarios["catedra"]))
+        result += (" " * indent) + "<i>Cátedra: {}</i>\n".format(", ".join(horarios["catedra"]))
     if len(horarios["auxiliar"]) > 0:
-        result += (" "*indent) + "<i>Auxiliar: {}</i>\n".format(", ".join(horarios["auxiliar"]))
+        result += (" " * indent) + "<i>Auxiliar: {}</i>\n".format(", ".join(horarios["auxiliar"]))
     if len(horarios["control"][0]) > 0:
-        result += (" "*indent) + "<i>Control: {}</i>\n".format(", ".join(horarios["control"][0]))
+        result += (" " * indent) + "<i>Control: {}</i>\n".format(", ".join(horarios["control"][0]))
     if len(horarios["control"][1]) > 0:
-        result += (" "*indent) + "<i>Semanas {}</i>\n".format(", ".join(horarios["control"][1]))
+        result += (" " * indent) + "<i>Semanas {}</i>\n".format(", ".join(horarios["control"][1]))
     return result
 
 
@@ -267,7 +271,7 @@ def notify_changes(added, deleted, modified, context):
 
 
 def start(update, context):
-    logger.info('Start from chat ' + str(update.message.chat_id))
+    logger.info('Start from user %s in chat %s', str(update.message.from_user.id), str(update.message.chat_id))
     if context.chat_data.get("enable", False):
         context.bot.send_message(
             chat_id=update.message.chat_id,
@@ -288,7 +292,7 @@ def start(update, context):
 
 
 def stop(update, context):
-    logger.info('Stop from chat ' + str(update.message.chat_id))
+    logger.info('Stop from user %s in chat %s', str(update.message.from_user.id), str(update.message.chat_id))
     context.chat_data["enable"] = False
     context.bot.send_message(
         chat_id=update.message.chat_id,
