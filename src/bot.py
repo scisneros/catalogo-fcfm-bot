@@ -255,8 +255,7 @@ def notify_changes(added, deleted, modified, context):
 
     for chat_id in chats_data:
         if chats_data[chat_id].get("enable", False):
-            try:
-                context.bot.send_message(
+            try_msg(context.bot, attempts=2,
                     chat_id=chat_id,
                     text=("\U00002757 ¡He detectado cambios en el catálogo!"
                           "\n{}\n"
@@ -265,40 +264,51 @@ def notify_changes(added, deleted, modified, context):
                           ).format(changes_str),
                     parse_mode="HTML",
                     disable_web_page_preview=True
-                )
-            except TelegramError as e:
-                logger.error("Messaging chat %s raised a TelegramError: %s", chat_id, str(e))
+                    )
+
+
+def try_msg(bot, attempts=3, **params):
+    chat_id = params["chat_id"]
+    for attempt in range(attempts):
+        try:
+            bot.send_message(**params)
+        except TelegramError as e:
+            logger.error("[Attempt %s/%s] Messaging chat %s raised following error: %s",
+                         str(attempt), str(attempts), str(chat_id), str(e))
+        else:
+            break
+    else:
+        logger.error("Max attempts reached for chat %s. Aborting message.", str(chat_id))
 
 
 def start(update, context):
     logger.info('Start from user %s in chat %s', str(update.message.from_user.id), str(update.message.chat_id))
     if context.chat_data.get("enable", False):
-        context.bot.send_message(
-            chat_id=update.message.chat_id,
-            text="¡Mis avisos para este chat ya están activados! El próximo chequeo será apróximadamente a las " +
-                 (last_check_time + timedelta(seconds=900)).strftime("%H:%M")
-        )
+        try_msg(context.bot, attempts=3,
+                chat_id=update.message.chat_id,
+                text="¡Mis avisos para este chat ya están activados! El próximo chequeo será apróximadamente a las "
+                     + (last_check_time + timedelta(seconds=900)).strftime("%H:%M")
+                )
     else:
-        context.chat_data["enable"] = True
-        context.bot.send_message(
-            chat_id=update.message.chat_id,
-            text="A partir de ahora avisaré por este chat si detecto algún cambio en el catálogo de cursos."
-        )
-        context.bot.send_message(
-            chat_id=update.message.chat_id,
-            text="Por ahora solo funciono con cursos de Computación, pero estoy aprendiendo a revisar "
-                 "cursos de otros departamentos \U0001F913\U0001F4DA"
-        )
+        try_msg(context.bot, attempts=3,
+                chat_id=update.message.chat_id,
+                text="A partir de ahora avisaré por este chat si detecto algún cambio en el catálogo de cursos."
+                )
+        try_msg(context.bot, attempts=3,
+                chat_id=update.message.chat_id,
+                text="Por ahora solo funciono con cursos de Computación, pero estoy aprendiendo a revisar "
+                     "cursos de otros departamentos \U0001F913\U0001F4DA"
+                )
 
 
 def stop(update, context):
     logger.info('Stop from user %s in chat %s', str(update.message.from_user.id), str(update.message.chat_id))
     context.chat_data["enable"] = False
-    context.bot.send_message(
-        chat_id=update.message.chat_id,
-        text="Ok, dejaré de avisar cambios en el catálogo por este chat."
-             "Puedes volver a activar los avisos enviándome /start nuevamente."
-    )
+    try_msg(context.bot, attempts=3,
+            chat_id=update.message.chat_id,
+            text="Ok, dejaré de avisar cambios en el catálogo por este chat."
+                 "Puedes volver a activar los avisos enviándome /start nuevamente."
+            )
 
 
 def main():
