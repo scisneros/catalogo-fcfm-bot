@@ -182,9 +182,9 @@ def parse_catalog():
 
 def check_catalog(context):
     logger.info("Looking for changes...")
-    last_check_time = datetime.now()
-    global data, new_data
+    global data, new_data, last_check_time
     new_data = parse_catalog()
+    last_check_time = datetime.now()
 
     old_cursos = set(data.keys())
     new_cursos = set(new_data.keys())
