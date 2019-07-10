@@ -1,0 +1,6 @@
+__pycache__/
+/excluded/
+/db
+src/config/auth.py
+
+.idea/
