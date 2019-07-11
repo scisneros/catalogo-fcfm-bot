@@ -1,4 +1,3 @@
-from telegram import TelegramError
 
 
 def full_strip(st):
@@ -35,17 +34,3 @@ def horarios_to_string(horarios, indent):
     if len(horarios["control"][1]) > 0:
         result += (" " * indent) + "<i>Semanas {}</i>\n".format(", ".join(horarios["control"][1]))
     return result
-
-
-def try_msg(bot, attempts=3, **params):
-    chat_id = params["chat_id"]
-    for attempt in range(attempts):
-        try:
-            bot.send_message(**params)
-        except TelegramError as e:
-            logger.error("[Attempt %s/%s] Messaging chat %s raised following error: %s",
-                         str(attempt), str(attempts), str(chat_id), str(e))
-        else:
-            break
-    else:
-        logger.error("Max attempts reached for chat %s. Aborting message.", str(chat_id))
