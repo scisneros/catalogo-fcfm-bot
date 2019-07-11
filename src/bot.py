@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 from requests import RequestException
 from telegram.ext import Updater, CommandHandler
 
-from config.auth import token, admin_id
+from config.auth import token, admin_ids
 from config.logger import logger
 from config.persistence import persistence
 from constants import *
@@ -179,13 +179,13 @@ def check_catalog(context):
 
 
 def notify_changes(all_changes, context):
-    chats_data = context.job.context
+    chats_data = context.job.context.chat_data
     changes_dict = {}
     for d_id in all_changes:
         changes_str = changes_to_string(all_changes[d_id], d_id)
         changes_dict[d_id] = changes_str
 
-    # for chat_id in [admin_id]:  # DEBUG, send only to admin
+    # for chat_id in admin_ids:  # DEBUG, send only to admin
     for chat_id in chats_data:
         subscribed_deptos = chats_data[int(chat_id)].setdefault("subscribed_deptos", [])
         subscribed_cursos = chats_data[int(chat_id)].setdefault("subscribed_cursos", [])
@@ -325,7 +325,7 @@ def changes_to_string(changes, depto_id):
 
 
 def start(update, context):
-    logger.info('Command /start from user %d in chat %d', update.message.from_user.id, update.message.chat_id)
+    logger.info("[Command /start]")
     if context.chat_data.get("enable", False):
         try_msg(context.bot,
                 chat_id=update.message.chat_id,
@@ -343,7 +343,7 @@ def start(update, context):
 
 
 def stop(update, context):
-    logger.info('Command /stop from user %d in chat %d', update.message.from_user.id, update.message.chat_id)
+    logger.info("[Command /stop]")
     context.chat_data["enable"] = False
     try_msg(context.bot,
             chat_id=update.message.chat_id,
@@ -353,7 +353,7 @@ def stop(update, context):
 
 
 def subscribe_depto(update, context):
-    logger.info('Command /suscribir_depto from user %d in chat %d', update.message.from_user.id, update.message.chat_id)
+    logger.info("[Command /suscribir_depto]")
     if context.args:
         added = []
         already = []
@@ -401,7 +401,7 @@ def subscribe_depto(update, context):
 
 
 def subscribe_curso(update, context):
-    logger.info('Command /suscribir_curso from user %d in chat %d', update.message.from_user.id, update.message.chat_id)
+    logger.info("[Command /suscribir_curso]")
     if context.args:
         added = []
         already = []
@@ -471,9 +471,7 @@ def subscribe_curso(update, context):
 
 
 def unsubscribe_depto(update, context):
-    logger.info('Command /desuscribir_depto from user %d in chat %d',
-                update.message.from_user.id, update.message.chat_id)
-
+    logger.info("[Command /desuscribir_depto]")
     if context.args:
         deleted = []
         notsuscribed = []
@@ -518,8 +516,7 @@ def unsubscribe_depto(update, context):
 
 
 def unsubscribe_curso(update, context):
-    logger.info('Command /desuscribir_curso from user %d in chat %d',
-                update.message.from_user.id, update.message.chat_id)
+    logger.info("[Command /desuscribir_curso]")
     if context.args:
         deleted = []
         notsuscribed = []
@@ -576,7 +573,7 @@ def unsubscribe_curso(update, context):
 
 
 def deptos(update, context):
-    logger.info('Command /deptos from user %d in chat %d', update.message.from_user.id, update.message.chat_id)
+    logger.info("[Command /deptos]")
     deptos_list = ["<b>{}</b> - <i>{} {}</i>".format(x, DEPTS[x][0], DEPTS[x][1]) for x in DEPTS]
 
     try_msg(context.bot,
@@ -588,7 +585,7 @@ def deptos(update, context):
 
 
 def subscriptions(update, context):
-    logger.info('Command /suscripciones from user %d in chat %d', update.message.from_user.id, update.message.chat_id)
+    logger.info("[Command /suscripciones]")
     subscribed_deptos = context.chat_data.get("subscribed_deptos", [])
     subscribed_cursos = context.chat_data.get("subscribed_cursos", [])
 
@@ -613,10 +610,20 @@ def subscriptions(update, context):
             text=result)
 
 
+def force_check(update, context):
+    if int(update.message.from_user.id) in admin_ids:
+        logger.info("[Command /force_check from admin %s]", update.message.from_user.id)
+        job_check = context.job_queue.get_jobs_by_name("job_check")[0]
+        job_check.run(job_check.context)
+
+
 def main():
     updater = Updater(token=token, use_context=True, persistence=persistence)
     dp = updater.dispatcher
     jq = updater.job_queue
+
+    jq.run_repeating(check_catalog, interval=900, context=dp, name="job_check")
+
     dp.add_handler(CommandHandler('start', start))
     dp.add_handler(CommandHandler('stop', stop))
     dp.add_handler(CommandHandler('suscribir_depto', subscribe_depto))
@@ -625,11 +632,11 @@ def main():
     dp.add_handler(CommandHandler('desuscribir_curso', unsubscribe_curso))
     dp.add_handler(CommandHandler('deptos', deptos))
     dp.add_handler(CommandHandler('suscripciones', subscriptions))
+    # Admin commands
+    dp.add_handler(CommandHandler('force_check', force_check))
 
     global data
     data = parse_catalog()
-
-    jq.run_repeating(check_catalog, interval=900, context=dp.chat_data)
 
     updater.start_polling()
     updater.idle()
