@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 
 from config.auth import token
 from config.persistence import persistence
-from utils import full_strip, parse_horario, horarios_to_string, try_msg
+from utils import full_strip, parse_horario, horarios_to_string
 
 logging.basicConfig(filename='../bot.log',
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -48,6 +48,20 @@ new_data = {}  # Lista de cursos de nueva consulta
 #                   }
 #        }
 #
+
+
+def try_msg(bot, attempts=3, **params):
+    chat_id = params["chat_id"]
+    for attempt in range(attempts):
+        try:
+            bot.send_message(**params)
+        except TelegramError as e:
+            logger.error("[Attempt %s/%s] Messaging chat %s raised following error: %s",
+                         str(attempt), str(attempts), str(chat_id), str(e))
+        else:
+            break
+    else:
+        logger.error("Max attempts reached for chat %s. Aborting message.", str(chat_id))
 
 
 def parse_catalog():
