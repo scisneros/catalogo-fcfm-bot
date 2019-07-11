@@ -107,7 +107,6 @@ def check_catalog(context):
         return
 
     logger.info("Looking for changes...")
-    last_check_time = datetime.now()
 
     all_changes = {}
 
@@ -176,6 +175,7 @@ def check_catalog(context):
     else:
         logger.info("No changes detected")
     data = new_data
+    last_check_time = datetime.now()
 
 
 def notify_changes(all_changes, context):
@@ -195,7 +195,8 @@ def notify_changes(all_changes, context):
             try_msg(context.bot, attempts=2,
                     parse_mode="HTML",
                     chat_id=chat_id,
-                    text="\U00002757 ¡He detectado cambios en tus suscripciones!")
+                    text="\U00002757 ¡He detectado cambios en tus suscripciones!\n"
+                         "<i>Último chequeo {}</i>".format(last_check_time.strftime("%H:%M:%S")))
             for d_id in dept_matches:
                 try_msg(context.bot, attempts=2,
                         chat_id=chat_id,
@@ -329,13 +330,15 @@ def start(update, context):
         try_msg(context.bot,
                 chat_id=update.message.chat_id,
                 text="¡Mis avisos para este chat ya están activados! El próximo chequeo será apróximadamente a las "
-                     + (last_check_time + timedelta(seconds=900)).strftime("%H:%M")
+                     + (last_check_time + timedelta(seconds=900)).strftime("%H:%M") +
+                     ".\nRecuerda configurar los avisos de este chat usando /suscribir_depto o /suscribir_curso"
                 )
     else:
         context.chat_data["enable"] = True
         try_msg(context.bot,
                 chat_id=update.message.chat_id,
                 text="A partir de ahora avisaré por este chat si detecto algún cambio en el catálogo de cursos."
+                     "\nRecuerda configurar los avisos de este chat usando /suscribir_depto o /suscribir_curso"
                 )
 
 
@@ -581,8 +584,6 @@ def subscriptions(update, context):
     sub_deptos_list = ["<b>({})</b>   <i>{} {}</i>".format(x, DEPTS[x][0], DEPTS[x][1]) for x in subscribed_deptos]
     sub_cursos_list = ["<b>({}-{})</b>   <i>{} en {} {}</i>"
                            .format(x[0], x[1], x[1], DEPTS[x[0]][0], DEPTS[x[0]][1]) for x in subscribed_cursos]
-    print("\n".join(sub_deptos_list))
-    print("\n".join(sub_cursos_list))
     try_msg(context.bot,
             chat_id=update.message.chat_id,
             parse_mode="HTML",
