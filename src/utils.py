@@ -22,7 +22,7 @@ def parse_horario(horarios_str):
         elif el.startswith("Control"):
             controlsplit = el.split(", Semana: ")
             result["control"][0] = controlsplit[0].lstrip("Control: ").split(", ")
-            result["control"][1] = controlsplit[1].split(", ")
+            result["control"][1] = controlsplit[1].split(", ") if len(controlsplit) > 1 else []
     return result
 
 
