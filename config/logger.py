@@ -1,9 +1,10 @@
 import logging
 from logging.handlers import RotatingFileHandler
+from os import path
 
 log_formatter = logging.Formatter('%(asctime)s %(levelname)s - %(message)s - [%(funcName)s:%(lineno)d]')
 
-logFile = '../bot.log'
+logFile = path.relpath('bot.log')
 
 # 3 MB max files, up to 2 backup files.
 my_handler = RotatingFileHandler(logFile, mode='a', maxBytes=3*1024*1024, backupCount=2, encoding=None, delay=0)
