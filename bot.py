@@ -92,7 +92,7 @@ def parse_catalog():
 
     sys.stdout.write("\nFinished scraping\n")
 
-    with open(path.relpath('../excluded/catalogdata.json'), "w") as datajsonfile:
+    with open(path.relpath('excluded/catalogdata.json'), "w") as datajsonfile:
         json.dump(result, datajsonfile, indent=4)
 
     logger.info("Finished scraping, found %s cursos with %s secciones", cursos_cnt, secciones_cnt)
