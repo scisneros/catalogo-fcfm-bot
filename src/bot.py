@@ -1,13 +1,16 @@
-from datetime import datetime, timedelta
-import requests
 import json
+import sys
+from datetime import datetime, timedelta
 
-from telegram.ext import Updater, CommandHandler
+import requests
 from bs4 import BeautifulSoup
+from requests import RequestException
+from telegram.ext import Updater, CommandHandler
 
+from config.auth import token, admin_id
 from config.logger import logger
-from config.auth import token
 from config.persistence import persistence
+from constants import *
 from utils import full_strip, parse_horario, horarios_to_string, try_msg
 
 last_check_time = datetime.now()
@@ -17,245 +20,582 @@ new_data = {}  # Lista de cursos de nueva consulta
 
 
 # Ejemplo de estructura de data:
-# data = {"CC3001": {nombre: "Algoritmos y Estructuras de Datos",
-#                    secciones: {"1": {profesor: ["Jérémy Barbay"],
-#                                      cupos: "90",
-#                                      horario: {catedra: ["Martes 10:15 - 11:45",
-#                                                          "Jueves 10:15 - 11:45"],
-#                                                auxiliar: ["Viernes 14:30 - 16:00"]}
+# data = {"5": {"CC3001": {nombre: "Algoritmos y Estructuras de Datos",
+#                          secciones: {"1": {profesor: ["Jérémy Barbay"],
+#                                            cupos: "90",
+#                                            horario: {catedra: ["Martes 10:15 - 11:45",
+#                                                                "Jueves 10:15 - 11:45"],
+#                                                      auxiliar: ["Viernes 14:30 - 16:00"]}
+#                                           }
+#                                     },
+#                                     {"2": {profesor: ["Patricio Poblete",
+#                                                       "Nelson Baloian T."],
+#                                            cupos: "90",
+#                                            horario: {catedra: ["Lunes 14:30 - 16:00",
+#                                                                "Miércoles 14:30 - 16:00"],
+#                                                      auxiliar: ["Viernes 14:30 - 16:00"],
+#                                                      control: [
+#                                                                ["Jueves 18:00 - 19:30"]
+#                                                                ["8", "14"]  # Semanas
+#                                                               ]}
+#                                           }
 #                                     }
-#                               },
-#                               {"2": {profesor: ["Patricio Poblete",
-#                                                 "Nelson Baloian T."],
-#                                      cupos: "90",
-#                                      horario: {catedra: ["Lunes 14:30 - 16:00",
-#                                                          "Miércoles 14:30 - 16:00"],
-#                                                auxiliar: ["Viernes 14:30 - 16:00"],
-#                                                control: [
-#                                                          ["Jueves 18:00 - 19:30"]
-#                                                          ["8", "14"]  # Semanas
-#                                                         ]}
-#                                     }
-#                               }
-#                   },
-#         "CC3002": {nombre: "Metodologías de Diseño y Programación",
-#                     ...
-#                   }
-#        }
+#                         },
+#               "CC3002": {nombre: "Metodologías de Diseño y Programación",
+#                           ...
+#                         }
+#              }
 #
 
 
 def parse_catalog():
+    logger.info("Scraping catalog...")
     result = {}
-    response = requests.get('https://ucampus.uchile.cl/m/fcfm_catalogo/?semestre=20191&depto=5')
-    soup = BeautifulSoup(response.content, 'html.parser')
-    for curso_tag in soup.find_all("div", class_="ramo"):
-        curso_str = full_strip(curso_tag.find("h2").contents[0]).split(" ", 1)
-        curso_id = curso_str[0]
-        curso_nombre = curso_str[1]
-        curso_secciones = {}
-        for seccion_tag in curso_tag.find("tbody").find_all("tr"):
-            seccion_data = seccion_tag.find_all("td")
-            seccion_id = seccion_tag["id"].split("-")[1]
-            seccion_profesores = []
-            for tag in seccion_data[1].find_all("h1"):
-                seccion_profesores.append(full_strip(tag.text))
-            seccion_cupos = full_strip(seccion_data[2].text)
-            seccion_horarios = parse_horario(seccion_data[4].contents)
-            seccion_dict = {"profesores": seccion_profesores,
-                            "cupos": seccion_cupos,
-                            "horarios": seccion_horarios}
-            curso_secciones[seccion_id] = seccion_dict
+    cursos_cnt = 0
+    secciones_cnt = 0
+    i = 0
+    for dept_id in DEPTS:
+        i += 1
+        dept_data = {}
+        url = "https://ucampus.uchile.cl/m/fcfm_catalogo/?semestre={}{}&depto={}".format(YEAR, SEMESTER, dept_id)
+        sys.stdout.write("\r Scraping catalog {} of {}".format(i, len(DEPTS)))
+        try:
+            response = requests.get(url)
+        except RequestException as e:
+            logger.error("Connection error: {}".format(e))
+            raise RequestException("Connection error on scraping")
+        soup = BeautifulSoup(response.content, 'html.parser')
+        for curso_tag in soup.find_all("div", class_="ramo"):
+            cursos_cnt += 1
+            curso_str = full_strip(curso_tag.find("h2").contents[0]).split(" ", 1)
+            curso_id = curso_str[0]
+            curso_nombre = curso_str[1]
+            curso_secciones = {}
+            for seccion_tag in curso_tag.find("tbody").find_all("tr"):
+                secciones_cnt += 1
+                seccion_data = seccion_tag.find_all("td")
+                seccion_id = seccion_tag["id"].split("-")[1]
+                seccion_profesores = []
+                for tag in seccion_data[1].find_all("h1"):
+                    seccion_profesores.append(full_strip(tag.text))
+                seccion_cupos = full_strip(seccion_data[2].text)
+                seccion_horarios = parse_horario(seccion_data[4].contents)
+                seccion_dict = {"profesores": seccion_profesores,
+                                "cupos": seccion_cupos,
+                                "horarios": seccion_horarios}
+                curso_secciones[seccion_id] = seccion_dict
 
-        result[curso_id] = {"nombre": curso_nombre, "secciones": curso_secciones}
+            dept_data[curso_id] = {"nombre": curso_nombre, "secciones": curso_secciones}
+
+        result[dept_id] = dept_data
+
+    sys.stdout.write("\nFinished scraping\n")
 
     with open("../excluded/catalogdata.json", "w") as datajsonfile:
         json.dump(result, datajsonfile, indent=4)
 
+    logger.info("Finished scraping, found %s cursos with %s secciones", cursos_cnt, secciones_cnt)
     return result
 
 
 def check_catalog(context):
-    logger.info("Looking for changes...")
     global data, new_data, last_check_time
-    new_data = parse_catalog()
+    try:
+        new_data = parse_catalog()
+    except RequestException:
+        logger.error("Aborting check.")
+        return
+
+    logger.info("Looking for changes...")
     last_check_time = datetime.now()
 
-    old_cursos = set(data.keys())
-    new_cursos = set(new_data.keys())
-    added = new_cursos - old_cursos
-    deleted = old_cursos - new_cursos
-    inter = old_cursos & new_cursos
-    modified = {}
-    for curso in inter:
-        mods = {}
-        if data[curso]["nombre"] != new_data[curso]["nombre"]:
-            mods["nombre"] = [data[curso]["nombre"], new_data[curso]["nombre"]]
-        old_secciones = set(data[curso]["secciones"].keys())
-        new_secciones = set(new_data[curso]["secciones"].keys())
-        changes_sec = {}
-        added_sec = new_secciones - old_secciones
-        deleted_sec = old_secciones - new_secciones
-        inter_sec = old_secciones & new_secciones
-        modified_sec = {}
-        for seccion in inter_sec:
-            mods_sec = {}
-            seccion = str(seccion)
-            if data[curso]["secciones"][seccion]["profesores"] != new_data[curso]["secciones"][seccion]["profesores"]:
-                mods_sec["profesores"] = [data[curso]["secciones"][seccion]["profesores"],
-                                          new_data[curso]["secciones"][seccion]["profesores"]]
-            if data[curso]["secciones"][seccion]["cupos"] != new_data[curso]["secciones"][seccion]["cupos"]:
-                mods_sec["cupos"] = [data[curso]["secciones"][seccion]["cupos"],
-                                     new_data[curso]["secciones"][seccion]["cupos"]]
-            if data[curso]["secciones"][seccion]["horarios"] != new_data[curso]["secciones"][seccion]["horarios"]:
-                mods_sec["horarios"] = [data[curso]["secciones"][seccion]["horarios"],
-                                        new_data[curso]["secciones"][seccion]["horarios"]]
-            if len(mods_sec) > 0:
-                modified_sec[seccion] = mods_sec
+    all_changes = {}
 
-        if len(added_sec) > 0:
-            changes_sec["added"] = added_sec
-        if len(deleted_sec) > 0:
-            changes_sec["deleted"] = deleted_sec
-        if len(modified_sec) > 0:
-            changes_sec["modified"] = modified_sec
+    for d_id in DEPTS:
+        old_cursos = data.get(d_id, {}).keys()
+        new_cursos = new_data.get(d_id, {}).keys()
+        ocs = set(old_cursos)
+        ncs = set(new_cursos)
+        added = [x for x in new_cursos if x not in ocs]
+        deleted = [x for x in old_cursos if x not in ncs]
+        inter = [x for x in old_cursos if x in ncs]
+        modified = {}
+        d_data = data[d_id]
+        d_new_data = new_data[d_id]
+        for c_id in inter:
+            mods = {}
+            if d_data[c_id]["nombre"] != d_new_data[c_id]["nombre"]:
+                mods["nombre"] = [d_data[c_id]["nombre"], d_new_data[c_id]["nombre"]]
+            old_secciones = set(d_data[c_id]["secciones"].keys())
+            new_secciones = set(d_new_data[c_id]["secciones"].keys())
+            changes_sec = {}
+            added_sec = new_secciones - old_secciones
+            deleted_sec = old_secciones - new_secciones
+            inter_sec = old_secciones & new_secciones
+            modified_sec = {}
+            for s_id in inter_sec:
+                mods_sec = {}
+                s_id = str(s_id)
+                if d_data[c_id]["secciones"][s_id]["profesores"] != d_new_data[c_id]["secciones"][s_id]["profesores"]:
+                    mods_sec["profesores"] = [d_data[c_id]["secciones"][s_id]["profesores"],
+                                              d_new_data[c_id]["secciones"][s_id]["profesores"]]
+                if d_data[c_id]["secciones"][s_id]["cupos"] != d_new_data[c_id]["secciones"][s_id]["cupos"]:
+                    mods_sec["cupos"] = [d_data[c_id]["secciones"][s_id]["cupos"],
+                                         d_new_data[c_id]["secciones"][s_id]["cupos"]]
+                if d_data[c_id]["secciones"][s_id]["horarios"] != d_new_data[c_id]["secciones"][s_id]["horarios"]:
+                    mods_sec["horarios"] = [d_data[c_id]["secciones"][s_id]["horarios"],
+                                            d_new_data[c_id]["secciones"][s_id]["horarios"]]
+                if len(mods_sec) > 0:
+                    modified_sec[s_id] = mods_sec
 
-        if len(changes_sec) > 0:
-            mods["secciones"] = changes_sec
+            if len(added_sec) > 0:
+                changes_sec["added"] = added_sec
+            if len(deleted_sec) > 0:
+                changes_sec["deleted"] = deleted_sec
+            if len(modified_sec) > 0:
+                changes_sec["modified"] = modified_sec
 
-        if len(mods) > 0:
-            modified[curso] = mods
-    if len(added) > 0:
-        logger.info("Added: " + str(added))
-    if len(deleted) > 0:
-        logger.info("Deleted: " + str(deleted))
-    if len(modified) > 0:
-        logger.info("Modified: " + str(modified))
-    if not (len(added) > 0 or len(deleted) > 0 or len(modified) > 0):
-        logger.info("No changes detected")
+            if len(changes_sec) > 0:
+                mods["secciones"] = changes_sec
+
+            if len(mods) > 0:
+                modified[c_id] = mods
+
+        if added or deleted or modified:
+            all_changes[d_id] = {}
+            if added:
+                all_changes[d_id]["added"] = added
+            if deleted:
+                all_changes[d_id]["deleted"] = deleted
+            if modified:
+                all_changes[d_id]["modified"] = modified
+
+    if len(all_changes) > 0:
+        logger.info("Changes detected on %s", str([x for x in all_changes]))
+        notify_changes(all_changes, context)
     else:
-        notify_changes(added, deleted, modified, context)
-
+        logger.info("No changes detected")
     data = new_data
 
 
-def changes_to_string(added, deleted, modified):
+def notify_changes(all_changes, context):
+    chats_data = context.job.context
+    changes_dict = {}
+    for d_id in all_changes:
+        changes_str = changes_to_string(all_changes[d_id], d_id)
+        changes_dict[d_id] = changes_str
+
+    for chat_id in [admin_id]:  # DEBUG, send only to admin
+        # for chat_id in chats_data:
+        subscribed_deptos = chats_data[int(chat_id)].setdefault("subscribed_deptos", [])
+        subscribed_cursos = chats_data[int(chat_id)].setdefault("subscribed_cursos", [])
+        dept_matches = [x for x in subscribed_deptos if x in all_changes]
+        curso_matches = [x for x in subscribed_cursos if (x[0] in all_changes and x[1] in all_changes[x[0]])]
+        if dept_matches or curso_matches:
+            try_msg(context.bot, attempts=2,
+                    parse_mode="HTML",
+                    chat_id=chat_id,
+                    text="\U00002757 ¡He detectado cambios en tus suscripciones!")
+            for d_id in dept_matches:
+                try_msg(context.bot, attempts=2,
+                        chat_id=chat_id,
+                        parse_mode="HTML",
+                        disable_web_page_preview=True,
+                        text=("<b>Cambios en {}</b>"
+                              "\n{}\n"
+                              "<a href='https://ucampus.uchile.cl/m/fcfm_catalogo/?semestre={}{}&depto={}'>"
+                              "\U0001F50D Ver catálogo</a>"
+                              ).format(DEPTS[d_id][1], changes_dict[d_id], YEAR, SEMESTER, d_id)
+                        )
+            for d_c_id in curso_matches:
+                d_id = d_c_id[0]
+                c_id = d_c_id[1]
+                change_type_str = ""
+                curso_changes_str = ""
+                if c_id in all_changes[d_id]["added"]:
+                    change_type_str = "Curso añadido:"
+                    curso_changes_str = added_curso_string(c_id, d_id)
+                elif c_id in all_changes[d_id]["deleted"]:
+                    change_type_str = "Curso eliminado:"
+                    curso_changes_str = deleted_curso_string(c_id, d_id)
+                elif c_id in all_changes[d_id]["modified"]:
+                    change_type_str = "Curso modificado:"
+                    curso_changes_str = modified_curso_string(c_id, d_id, all_changes[d_id]["modified"][c_id])
+                try_msg(context.bot, attempts=2,
+                        chat_id=chat_id,
+                        parse_mode="HTML",
+                        disable_web_page_preview=True,
+                        text=("<b>{}</b>"
+                              "\n{}\n"
+                              "<a href='https://ucampus.uchile.cl/m/fcfm_catalogo/?semestre={}{}&depto={}'>"
+                              "\U0001F50D Ver catálogo</a>"
+                              ).format(change_type_str, curso_changes_str, YEAR, SEMESTER, d_id)
+                        )
+
+
+def added_curso_string(curso_id, depto_id):
+    result = ""
+    curso = new_data[depto_id][curso_id]
+    result += "\U0001F4D7 <b>{} {}</b>\n".format(curso_id, curso["nombre"])
+    for seccion_id in curso["secciones"]:
+        seccion = curso["secciones"][seccion_id]
+        profs = ", ".join(seccion["profesores"])
+        result += "    S{} - {} - {} cupos\n".format(seccion_id, profs, seccion["cupos"])
+        result += horarios_to_string(seccion["horarios"], 8)
+    return result
+
+
+def deleted_curso_string(curso_id, depto_id):
+    result = ""
+    curso = data[depto_id][curso_id]
+    result += "\U0001F4D9 <b>{} {}</b>\n".format(curso_id, curso["nombre"])
+    return result
+
+
+def modified_curso_string(curso_id, depto_id, curso_mods):
+    result = ""
+    if "nombre" in curso_mods:
+        result += "\U0001F4D8 <b>{}</b> _{}_\n_Renombrado:_ <b>{}</b>".format(curso_id,
+                                                                              curso_mods["nombre"][0],
+                                                                              curso_mods["nombre"][1])
+    else:
+        result += "\U0001F4D8 <b>{} {}</b>\n".format(curso_id, new_data[depto_id][curso_id]["nombre"])
+    if "secciones" in curso_mods:
+        if "added" in curso_mods["secciones"]:
+            result += "    <i>Secciones añadidas:</i>\n"
+            for seccion_id in curso_mods["secciones"]["added"]:
+                seccion = new_data[depto_id][curso_id]["secciones"][seccion_id]
+                profs = ", ".join(seccion["profesores"])
+                result += "    \U00002795 Secc. {} - {} - {} cupos\n".format(seccion_id, profs,
+                                                                             seccion["cupos"])
+                result += horarios_to_string(seccion["horarios"], 8)
+        if "deleted" in curso_mods["secciones"]:
+            result += "    <i>Secciones eliminadas:</i>\n"
+            for seccion_id in curso_mods["secciones"]["deleted"]:
+                seccion = new_data[depto_id][curso_id]["secciones"][seccion_id]
+                profs = ", ".join(seccion["profesores"])
+                result += "    \U00002796 Secc. {} - {}\n".format(seccion_id, profs)
+        if "modified" in curso_mods["secciones"]:
+            result += "    <i>Secciones modificadas:</i>\n"
+            for seccion_id in curso_mods["secciones"]["modified"]:
+                seccion_mods = curso_mods["secciones"]["modified"][seccion_id]
+                if "profesores" in seccion_mods:
+                    result += "    \U00003030 <b>Sección {}</b>\n".format(seccion_id)
+                    result += "        Cambia profesor\n".format(seccion_id)
+                    result += "        \U00002013 de: <i>{}</i>\n".format(
+                        ", ".join(seccion_mods["profesores"][0]))
+                    result += "        \U00002013 a: <b>{}</b>\n".format(
+                        ", ".join(seccion_mods["profesores"][1]))
+                else:
+                    profs = ", ".join(new_data[depto_id][curso_id]["secciones"][seccion_id]["profesores"])
+                    result += "    \U00003030 <b>Sección {}</b> - {}\n".format(seccion_id, profs)
+                if "cupos" in seccion_mods:
+                    result += "        Cambia cupos\n".format(seccion_id)
+                    result += "        \U00002013 de: <i>{}</i>\n".format(seccion_mods["cupos"][0])
+                    result += "        \U00002013 a: <b>{}</b>\n".format(seccion_mods["cupos"][1])
+                if "horarios" in seccion_mods:
+                    result += "        Cambia horario\n".format(seccion_id)
+                    result += "        \U00002013 de:\n{}".format(
+                        horarios_to_string(seccion_mods["horarios"][0], 12))
+                    result += "        \U00002013 a:\n{}".format(
+                        horarios_to_string(seccion_mods["horarios"][1], 12))
+    return result
+
+
+def changes_to_string(changes, depto_id):
+    added = changes.get("added", [])
+    deleted = changes.get("deleted", [])
+    modified = changes.get("modified", [])
     changes_str = ""
     if len(added) > 0:
         changes_str += "\n<i>Cursos añadidos:</i>\n"
         for curso_id in added:
-            curso = new_data[curso_id]
-            changes_str += "\U0001F4D7 <b>{} {}</b>\n".format(curso_id, curso["nombre"])
-            for seccion_id in curso["secciones"]:
-                seccion = curso["secciones"][seccion_id]
-                profs = ", ".join(seccion["profesores"])
-                changes_str += "    S{} - {} - {} cupos\n".format(seccion_id, profs, seccion["cupos"])
-                changes_str += horarios_to_string(seccion["horarios"], 8)
+            changes_str += added_curso_string(curso_id, depto_id)
     if len(deleted) > 0:
         changes_str += "\n<i>Cursos eliminados:</i>\n"
         for curso_id in deleted:
-            curso = data[curso_id]
-            changes_str += "\U0001F4D9 <b>{} {}</b>\n".format(curso_id, curso["nombre"])
+            deleted_curso_string(curso_id, depto_id)
     if len(modified) > 0:
         changes_str += "\n<i>Cursos modificados:</i>\n"
         for curso_id in modified:
-            curso_mods = modified[curso_id]
-            if "nombre" in curso_mods:
-                changes_str += "\U0001F4D8 <b>{}</b> _{}_\n_Renombrado:_ <b>{}</b>".format(curso_id,
-                                                                                           curso_mods["nombre"][0],
-                                                                                           curso_mods["nombre"][1])
-            else:
-                changes_str += "\U0001F4D8 <b>{} {}</b>\n".format(curso_id, new_data[curso_id]["nombre"])
-            if "secciones" in curso_mods:
-                if "added" in curso_mods["secciones"]:
-                    changes_str += "    <i>Secciones añadidas:</i>\n"
-                    for seccion_id in curso_mods["secciones"]["added"]:
-                        seccion = new_data[curso_id]["secciones"][seccion_id]
-                        profs = ", ".join(seccion["profesores"])
-                        changes_str += "    \U00002795 Secc. {} - {} - {} cupos\n".format(seccion_id, profs,
-                                                                                          seccion["cupos"])
-                        changes_str += horarios_to_string(seccion["horarios"], 8)
-                if "deleted" in curso_mods["secciones"]:
-                    changes_str += "    <i>Secciones eliminadas:</i>\n"
-                    for seccion_id in curso_mods["secciones"]["deleted"]:
-                        seccion = new_data[curso_id]["secciones"][seccion_id]
-                        profs = ", ".join(seccion["profesores"])
-                        changes_str += "    \U00002796 Secc. {} - {}\n".format(seccion_id, profs)
-                if "modified" in curso_mods["secciones"]:
-                    changes_str += "    <i>Secciones modificadas:</i>\n"
-                    for seccion_id in curso_mods["secciones"]["modified"]:
-                        seccion_mods = curso_mods["secciones"]["modified"][seccion_id]
-                        if "profesores" in seccion_mods:
-                            changes_str += "    \U00003030 <b>Sección {}</b>\n".format(seccion_id)
-                            changes_str += "        Cambia profesor\n".format(seccion_id)
-                            changes_str += "        \U00002013 de: <i>{}</i>\n".format(
-                                ", ".join(seccion_mods["profesores"][0]))
-                            changes_str += "        \U00002013 a: <i>{}</i>\n".format(
-                                ", ".join(seccion_mods["profesores"][1]))
-                        else:
-                            profs = ", ".join(new_data[curso_id]["secciones"][seccion_id]["profesores"])
-                            changes_str += "    \U00003030 <b>Sección {}</b> - {}\n".format(seccion_id, profs)
-                        if "cupos" in seccion_mods:
-                            changes_str += "        Cambia cupos\n".format(seccion_id)
-                            changes_str += "        \U00002013 de: <i>{}</i>\n".format(seccion_mods["cupos"][0])
-                            changes_str += "        \U00002013 a: <b>{}</b>\n".format(seccion_mods["cupos"][1])
-                        if "horarios" in seccion_mods:
-                            changes_str += "        Cambia horario\n".format(seccion_id)
-                            changes_str += "        \U00002013 de:\n{}".format(
-                                horarios_to_string(seccion_mods["horarios"][0], 8))
-                            changes_str += "        \U00002013 a:\n{}".format(
-                                horarios_to_string(seccion_mods["horarios"][1], 8))
+            changes_str += modified_curso_string(curso_id, depto_id, modified[curso_id])
+
     return changes_str
 
 
-def notify_changes(added, deleted, modified, context):
-    chats_data = context.job.context
-
-    changes_str = changes_to_string(added, deleted, modified)
-
-    for chat_id in chats_data:
-        if chats_data[chat_id].get("enable", False):
-            try_msg(context.bot, attempts=2,
-                    chat_id=chat_id,
-                    text=("\U00002757 ¡He detectado cambios en el catálogo!"
-                          "\n{}\n"
-                          "<a href='https://ucampus.uchile.cl/m/fcfm_catalogo/?semestre=20191&depto=5'>"
-                          "\U0001F50D Ver catálogo</a>"
-                          ).format(changes_str),
-                    parse_mode="HTML",
-                    disable_web_page_preview=True
-                    )
-
-
 def start(update, context):
-    logger.info('Start from user %s in chat %s', str(update.message.from_user.id), str(update.message.chat_id))
+    logger.info('Command /start from user %d in chat %d', update.message.from_user.id, update.message.chat_id)
     if context.chat_data.get("enable", False):
-        try_msg(context.bot, attempts=3,
+        try_msg(context.bot,
                 chat_id=update.message.chat_id,
                 text="¡Mis avisos para este chat ya están activados! El próximo chequeo será apróximadamente a las "
                      + (last_check_time + timedelta(seconds=900)).strftime("%H:%M")
                 )
     else:
         context.chat_data["enable"] = True
-        try_msg(context.bot, attempts=3,
+        try_msg(context.bot,
                 chat_id=update.message.chat_id,
                 text="A partir de ahora avisaré por este chat si detecto algún cambio en el catálogo de cursos."
-                )
-        try_msg(context.bot, attempts=3,
-                chat_id=update.message.chat_id,
-                text="Por ahora solo funciono con cursos de Computación, pero estoy aprendiendo a revisar "
-                     "cursos de otros departamentos \U0001F913\U0001F4DA"
                 )
 
 
 def stop(update, context):
-    logger.info('Stop from user %s in chat %s', str(update.message.from_user.id), str(update.message.chat_id))
+    logger.info('Command /stop from user %d in chat %d', update.message.from_user.id, update.message.chat_id)
     context.chat_data["enable"] = False
-    try_msg(context.bot, attempts=3,
+    try_msg(context.bot,
             chat_id=update.message.chat_id,
             text="Ok, dejaré de avisar cambios en el catálogo por este chat. "
                  "Puedes volver a activar los avisos enviándome /start nuevamente."
             )
+
+
+def subscribe_depto(update, context):
+    logger.info('Command /suscribir_depto from user %d in chat %d', update.message.from_user.id, update.message.chat_id)
+    if context.args:
+        added = []
+        already = []
+        failed = []
+        for arg in context.args:
+            if arg in DEPTS:
+                if "subscribed_deptos" not in context.chat_data:
+                    context.chat_data["subscribed_deptos"] = []
+                if arg not in context.chat_data["subscribed_deptos"]:
+                    added.append(arg)
+                    context.chat_data["subscribed_deptos"].append(arg)
+                else:
+                    already.append(arg)
+            else:
+                failed.append(arg)
+        response = ""
+        if added:
+            response += "Te avisaré sobre los cambios en <i>{}</i>.\n" \
+                .format(", ".join([DEPTS[x][1] + " ({})".format(x) for x in added]))
+        if already:
+            response += "Ya te habías suscrito a <i>{}</i>.\n" \
+                .format(", ".join([DEPTS[x][1] + " ({})".format(x) for x in already]))
+        if failed:
+            response += "No pude identificar ningún departamento asociado a <i>{}</i>.\n".format(", ".join(failed))
+            response += "Puedo recordarte la lista de /deptos que reconozco.\n"
+
+        try_msg(context.bot,
+                chat_id=update.message.chat_id,
+                parse_mode="HTML",
+                text=response)
+
+        if added and not context.chat_data.get("enable", False):
+            try_msg(context.bot,
+                    chat_id=update.message.chat_id,
+                    parse_mode="HTML",
+                    text="He registrado tus suscripciones ¡Pero los avisos para este chat están desactivados!.\n"
+                         "Actívalos enviándome /start")
+    else:
+        try_msg(context.bot,
+                chat_id=update.message.chat_id,
+                parse_mode="HTML",
+                text="Debes decirme qué departamentos deseas monitorear.\n<i>Ej. /suscribir_depto 5 21 9</i>\n\n"
+                     "Para ver la lista de códigos de deptos que reconozco envía /deptos")
+
+
+def subscribe_curso(update, context):
+    logger.info('Command /suscribir_curso from user %d in chat %d', update.message.from_user.id, update.message.chat_id)
+    if context.args:
+        added = []
+        already = []
+        unknown = []
+        failed = []
+        failed_depto = []
+        for arg in context.args:
+            try:
+                (d_arg, c_arg) = arg.split("-")
+            except ValueError:
+                failed.append(arg)
+                continue
+
+            if d_arg in DEPTS:
+                if "subscribed_cursos" not in context.chat_data:
+                    context.chat_data["subscribed_cursos"] = []
+                if (d_arg, c_arg) not in context.chat_data["subscribed_cursos"]:
+                    context.chat_data["subscribed_cursos"].append((d_arg, c_arg))
+                    is_curso_known = c_arg in data[d_arg]
+                    if is_curso_known:
+                        added.append((d_arg, c_arg))
+                    else:
+                        unknown.append((d_arg, c_arg))
+                else:
+                    already.append((d_arg, c_arg))
+            else:
+                failed_depto.append((d_arg, c_arg))
+        response = ""
+        if added:
+            response += "Te avisaré sobre cambios en <i>{}</i>.\n" \
+                .format(", ".join([(x[1] + " de " + DEPTS[x[0]][1] + " ({})".format(x[0])) for x in added]))
+        if already:
+            response += "Ya te habías suscrito a <i>{}</i>.\n" \
+                .format(", ".join([(x[1] + " de " + DEPTS[x[0]][1] + " ({})".format(x[0])) for x in already]))
+        if failed_depto:
+            response += "No pude identificar ningún departamento asociado a <i>{}</i>.\n" \
+                .format(", ".join([x[0] for x in failed_depto]))
+            response += "Puedo recordarte la lista de /deptos que reconozco.\n"
+        if failed:
+            response += "No pude identificar el par <i>'depto-curso'</i> en <i>{}</i>.\n".format(", ".join(failed))
+            response += "Guíate por el formato del ejemplo:\n" \
+                        "<i>Ej. /suscribir_curso 5-CC3001 21-MA1002</i>\n"
+        if unknown:
+            response += "Actualmente no tengo registros de <i>{}</i>.\n" \
+                .format(", ".join([(x[1] + " en " + DEPTS[x[0]][1] + " ({})".format(x[0])) for x in unknown]))
+            response += "Te avisaré si aparece algún curso con ese nombre en ese depto.\n"
+
+        try_msg(context.bot,
+                chat_id=update.message.chat_id,
+                parse_mode="HTML",
+                text=response)
+
+        if (added or unknown) and not context.chat_data.get("enable", False):
+            try_msg(context.bot,
+                    chat_id=update.message.chat_id,
+                    parse_mode="HTML",
+                    text="He registrado tus suscripciones ¡Pero los avisos para este chat están desactivados!.\n"
+                         "Actívalos enviándome /start")
+    else:
+        try_msg(context.bot,
+                chat_id=update.message.chat_id,
+                parse_mode="HTML",
+                text="Debes decirme qué cursos deseas monitorear en la forma <i>'depto-curso'</i> para registrarlo.\n"
+                     "<i>Ej. /suscribir_curso 5-CC3001 21-MA1002</i>\n\n"
+                     "Para ver la lista de códigos de deptos que reconozco envía /deptos")
+
+
+def unsubscribe_depto(update, context):
+    logger.info('Command /desuscribir_depto from user %d in chat %d',
+                update.message.from_user.id, update.message.chat_id)
+
+    if context.args:
+        deleted = []
+        notsuscribed = []
+        failed = []
+        for arg in context.args:
+            if arg in DEPTS:
+                if arg in context.chat_data["subscribed_deptos"]:
+                    deleted.append(arg)
+                    context.chat_data["subscribed_deptos"].remove(arg)
+                else:
+                    notsuscribed.append(arg)
+            else:
+                failed.append(arg)
+        response = ""
+        if deleted:
+            response += "Dejaré de avisarte sobre cambios en <i>{}</i>.\n" \
+                .format(", ".join([DEPTS[x][1] + " ({})".format(x) for x in deleted]))
+        if notsuscribed:
+            response += "No estás suscrito a <i>{}</i>.\n" \
+                .format(", ".join([DEPTS[x][1] + " ({})".format(x) for x in notsuscribed]))
+        if failed:
+            response += "No pude identificar ningún departamento asociado a <i>{}</i>.\n".format(", ".join(failed))
+            response += "Puedo recordarte la lista de /deptos que reconozco.\n"
+
+        response += "\nRecuerda que puedes apagar temporalmente todos los avisos usando /stop, " \
+                    "sin perder tus suscripciones"
+    else:
+        try_msg(context.bot,
+                chat_id=update.message.chat_id,
+                parse_mode="HTML",
+                text="Indícame qué departamentos quieres dejar de monitorear.\n"
+                     "<i>Ej. /desuscribir_depto 5 21</i>\n\n"
+                     "Para ver las suscripciones de este chat envía /suscripciones\n"
+                     "Para ver la lista de códigos de deptos que reconozco envía /deptos\n")
+
+
+def unsubscribe_curso(update, context):
+    logger.info('Command /desuscribir_curso from user %d in chat %d',
+                update.message.from_user.id, update.message.chat_id)
+    if context.args:
+        deleted = []
+        notsuscribed = []
+        failed = []
+        failed_depto = []
+        for arg in context.args:
+            try:
+                (d_arg, c_arg) = arg.split("-")
+            except ValueError:
+                failed.append(arg)
+                continue
+
+            if d_arg in DEPTS:
+                if "subscribed_cursos" not in context.chat_data:
+                    context.chat_data["subscribed_cursos"] = []
+                if (d_arg, c_arg) in context.chat_data["subscribed_cursos"]:
+                    deleted.append((d_arg, c_arg))
+                    context.chat_data["subscribed_cursos"].remove((d_arg, c_arg))
+                else:
+                    notsuscribed.append((d_arg, c_arg))
+            else:
+                failed_depto.append((d_arg, c_arg))
+        response = ""
+        if deleted:
+            response += "Dejaré de avisarte sobre cambios en <i>{}</i>.\n" \
+                .format(", ".join([(x[1] + " de " + DEPTS[x[0]][1] + " ({})".format(x[0])) for x in deleted]))
+        if notsuscribed:
+            response += "No estás suscrito <i>{}</i>.\n" \
+                .format(", ".join([(x[1] + " de " + DEPTS[x[0]][1] + " ({})".format(x[0])) for x in notsuscribed]))
+        if failed_depto:
+            response += "No pude identificar ningún departamento asociado a <i>{}</i>.\n" \
+                .format(", ".join([x[0] for x in failed_depto]))
+            response += "Puedo recordarte la lista de /deptos que reconozco.\n"
+        if failed:
+            response += "No pude identificar el par <i>'depto-curso'</i> en <i>{}</i>.\n".format(", ".join(failed))
+            response += "Guíate por el formato del ejemplo:\n" \
+                        "<i>Ej. /desuscribir_curso 5-CC3001 21-MA1002</i>\n"
+
+        response += "\nRecuerda que puedes apagar temporalmente todos los avisos usando /stop, " \
+                    "sin perder tus suscripciones"
+        try_msg(context.bot,
+                chat_id=update.message.chat_id,
+                parse_mode="HTML",
+                text=response)
+    else:
+        try_msg(context.bot,
+                chat_id=update.message.chat_id,
+                parse_mode="HTML",
+                text="Debes decirme qué cursos deseas monitorear en la forma <i>'depto-curso'</i> para registrarlo.\n"
+                     "<i>Ej. /suscribir_curso 5-CC3001 21-MA1002</i>\n\n"
+                     "Para ver la lista de códigos de deptos que reconozco envía /deptos")
+
+
+def deptos(update, context):
+    logger.info('Command /deptos from user %d in chat %d', update.message.from_user.id, update.message.chat_id)
+    deptos_list = ["<b>{}</b> - <i>{} {}</i>".format(x, DEPTS[x][0], DEPTS[x][1]) for x in DEPTS]
+
+    try_msg(context.bot,
+            chat_id=update.message.chat_id,
+            parse_mode="HTML",
+            text="Estos son los códigos que representan a cada departamento o área. "
+                 "Utilizaré los mismos códigos que usa U-Campus para facilitar la consistencia\n"
+                 "\n{}".format("\n".join(deptos_list)))
+
+
+def subscriptions(update, context):
+    logger.info('Command /suscripciones from user %d in chat %d', update.message.from_user.id, update.message.chat_id)
+    subscribed_deptos = context.chat_data.get("subscribed_deptos", [])
+    subscribed_cursos = context.chat_data.get("subscribed_cursos", [])
+
+    sub_deptos_list = ["<b>({})</b>   <i>{} {}</i>".format(x, DEPTS[x][0], DEPTS[x][1]) for x in subscribed_deptos]
+    sub_cursos_list = ["<b>({}-{})</b>   <i>{} en {} {}</i>"
+                           .format(x[0], x[1], x[1], DEPTS[x[0]][0], DEPTS[x[0]][1]) for x in subscribed_cursos]
+    print("\n".join(sub_deptos_list))
+    print("\n".join(sub_cursos_list))
+    try_msg(context.bot,
+            chat_id=update.message.chat_id,
+            parse_mode="HTML",
+            text="Actualmente tengo los siguientes avisos para este chat:\n\n"
+                 "<b>Avisos activados:</b> <i>{}</i>\n"
+                 "-----------------------------------------\n\n"
+                 "<b>Avisos por departamento:</b>\n"
+                 "-----------------------------------------\n"
+                 "{}\n\n"
+                 "<b>Avisos por curso:</b>\n"
+                 "-----------------------------------------\n"
+                 "{}".format("Sí" if context.chat_data.get("enable", False) else "No",
+                             "\n".join(sub_deptos_list), "\n".join(sub_cursos_list)))
 
 
 def main():
@@ -264,6 +604,12 @@ def main():
     jq = updater.job_queue
     dp.add_handler(CommandHandler('start', start))
     dp.add_handler(CommandHandler('stop', stop))
+    dp.add_handler(CommandHandler('suscribir_depto', subscribe_depto))
+    dp.add_handler(CommandHandler('suscribir_curso', subscribe_curso))
+    dp.add_handler(CommandHandler('desuscribir_depto', unsubscribe_depto))
+    dp.add_handler(CommandHandler('desuscribir_curso', unsubscribe_curso))
+    dp.add_handler(CommandHandler('deptos', deptos))
+    dp.add_handler(CommandHandler('suscripciones', subscriptions))
 
     global data
     data = parse_catalog()
