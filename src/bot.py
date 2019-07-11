@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 
 from config.auth import token
 from config.persistence import persistence
-from utils import *
+from utils import full_strip, parse_horario, horarios_to_string, try_msg
 
 logging.basicConfig(filename='../bot.log',
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -241,6 +241,7 @@ def start(update, context):
                      + (last_check_time + timedelta(seconds=900)).strftime("%H:%M")
                 )
     else:
+        context.chat_data["enable"] = True
         try_msg(context.bot, attempts=3,
                 chat_id=update.message.chat_id,
                 text="A partir de ahora avisaré por este chat si detecto algún cambio en el catálogo de cursos."
@@ -257,7 +258,7 @@ def stop(update, context):
     context.chat_data["enable"] = False
     try_msg(context.bot, attempts=3,
             chat_id=update.message.chat_id,
-            text="Ok, dejaré de avisar cambios en el catálogo por este chat."
+            text="Ok, dejaré de avisar cambios en el catálogo por este chat. "
                  "Puedes volver a activar los avisos enviándome /start nuevamente."
             )
 
