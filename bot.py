@@ -641,7 +641,7 @@ def main():
     dp.add_handler(CommandHandler('suscripciones', subscriptions))
     # Admin commands
     dp.add_handler(CommandHandler('force_check', force_check))
-    dp.add_handler(CommandHandler('get_log', force_check))
+    dp.add_handler(CommandHandler('get_log', get_log))
 
     global data
     data = parse_catalog()
