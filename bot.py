@@ -618,6 +618,12 @@ def force_check(update, context):
         job_check.run(job_check.context)
 
 
+def get_log(update, context):
+    if int(update.message.from_user.id) in admin_ids:
+        logger.info("[Command /get_log from admin %s]", update.message.from_user.id)
+        send_document(chat_id=update.message.from_user.id, document=open(path.relpath('bot.log'), 'rb'), filename=CataLog)
+
+
 def main():
     updater = Updater(token=token, use_context=True, persistence=persistence)
     dp = updater.dispatcher
@@ -635,6 +641,7 @@ def main():
     dp.add_handler(CommandHandler('suscripciones', subscriptions))
     # Admin commands
     dp.add_handler(CommandHandler('force_check', force_check))
+    dp.add_handler(CommandHandler('get_log', force_check))
 
     global data
     data = parse_catalog()
