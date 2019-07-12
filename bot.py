@@ -621,7 +621,8 @@ def force_check(update, context):
 def get_log(update, context):
     if int(update.message.from_user.id) in admin_ids:
         logger.info("[Command /get_log from admin %s]", update.message.from_user.id)
-        send_document(chat_id=update.message.from_user.id, document=open(path.relpath('bot.log'), 'rb'), filename=CataLog)
+        context.bot.send_document(chat_id=update.message.from_user.id,
+                                  document=open(path.relpath('bot.log'), 'rb'))
 
 
 def main():
