@@ -49,7 +49,7 @@ new_data = {}  # Lista de cursos de nueva consulta
 #
 
 
-def parse_catalog():
+def scrape_catalog():
     logger.info("Scraping catalog...")
     result = {}
     cursos_cnt = 0
@@ -102,7 +102,7 @@ def parse_catalog():
 def check_catalog(context):
     global data, new_data, last_check_time
     try:
-        new_data = parse_catalog()
+        new_data = scrape_catalog()
     except RequestException:
         logger.error("Aborting check.")
         return
@@ -621,7 +621,13 @@ def force_check(update, context):
 def get_log(update, context):
     if int(update.message.from_user.id) in admin_ids:
         logger.info("[Command /get_log from admin %s]", update.message.from_user.id)
-        send_document(chat_id=update.message.from_user.id, document=open(path.relpath('bot.log'), 'rb'), filename=CataLog)
+        context.bot.send_document(chat_id=update.message.from_user.id,
+                                  document=open(path.relpath('bot.log'), 'rb'),
+                                  filename="CataLog")
+
+
+def get_chats_data(update, context):
+    pass
 
 
 def main():
@@ -641,10 +647,10 @@ def main():
     dp.add_handler(CommandHandler('suscripciones', subscriptions))
     # Admin commands
     dp.add_handler(CommandHandler('force_check', force_check))
-    dp.add_handler(CommandHandler('get_log', force_check))
+    dp.add_handler(CommandHandler('get_log', get_log))
 
     global data
-    data = parse_catalog()
+    data = scrape_catalog()
 
     updater.start_polling()
     updater.idle()
