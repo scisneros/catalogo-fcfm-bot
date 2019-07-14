@@ -119,6 +119,7 @@ def check_catalog(context):
 
         logger.info("Looking for changes...")
 
+
         all_changes = {}
 
         for d_id in DEPTS:
