@@ -1,12 +1,15 @@
 import json
+import os
+import pickle
 import sys
+import tempfile
 from datetime import datetime, timedelta
 from os import path
 
 import requests
 from bs4 import BeautifulSoup
 from requests import RequestException
-from telegram.ext import Updater, CommandHandler
+from telegram.ext import Updater, CommandHandler, Filters
 
 from config.auth import token, admin_ids
 from config.logger import logger
@@ -18,6 +21,11 @@ last_check_time = datetime.now()
 
 data = {}  # Lista de cursos de última consulta
 new_data = {}  # Lista de cursos de nueva consulta
+
+
+updater = Updater(token=token, use_context=True, persistence=persistence)
+dp = updater.dispatcher
+jq = updater.job_queue
 
 
 # Ejemplo de estructura de data:
@@ -100,87 +108,94 @@ def scrape_catalog():
 
 
 def check_catalog(context):
-    global data, new_data, last_check_time
     try:
-        new_data = scrape_catalog()
-    except RequestException:
-        logger.error("Aborting check.")
-        return
+        global data, new_data, last_check_time
 
-    logger.info("Looking for changes...")
+        try:
+            new_data = scrape_catalog()
+        except RequestException:
+            logger.error("Aborting check.")
+            return
 
-    all_changes = {}
+        logger.info("Looking for changes...")
 
-    for d_id in DEPTS:
-        old_cursos = data.get(d_id, {}).keys()
-        new_cursos = new_data.get(d_id, {}).keys()
-        ocs = set(old_cursos)
-        ncs = set(new_cursos)
-        added = [x for x in new_cursos if x not in ocs]
-        deleted = [x for x in old_cursos if x not in ncs]
-        inter = [x for x in old_cursos if x in ncs]
-        modified = {}
-        d_data = data[d_id]
-        d_new_data = new_data[d_id]
-        for c_id in inter:
-            mods = {}
-            if d_data[c_id]["nombre"] != d_new_data[c_id]["nombre"]:
-                mods["nombre"] = [d_data[c_id]["nombre"], d_new_data[c_id]["nombre"]]
-            old_secciones = set(d_data[c_id]["secciones"].keys())
-            new_secciones = set(d_new_data[c_id]["secciones"].keys())
-            changes_sec = {}
-            added_sec = new_secciones - old_secciones
-            deleted_sec = old_secciones - new_secciones
-            inter_sec = old_secciones & new_secciones
-            modified_sec = {}
-            for s_id in inter_sec:
-                mods_sec = {}
-                s_id = str(s_id)
-                if d_data[c_id]["secciones"][s_id]["profesores"] != d_new_data[c_id]["secciones"][s_id]["profesores"]:
-                    mods_sec["profesores"] = [d_data[c_id]["secciones"][s_id]["profesores"],
-                                              d_new_data[c_id]["secciones"][s_id]["profesores"]]
-                if d_data[c_id]["secciones"][s_id]["cupos"] != d_new_data[c_id]["secciones"][s_id]["cupos"]:
-                    mods_sec["cupos"] = [d_data[c_id]["secciones"][s_id]["cupos"],
-                                         d_new_data[c_id]["secciones"][s_id]["cupos"]]
-                if d_data[c_id]["secciones"][s_id]["horarios"] != d_new_data[c_id]["secciones"][s_id]["horarios"]:
-                    mods_sec["horarios"] = [d_data[c_id]["secciones"][s_id]["horarios"],
-                                            d_new_data[c_id]["secciones"][s_id]["horarios"]]
-                if len(mods_sec) > 0:
-                    modified_sec[s_id] = mods_sec
+        all_changes = {}
 
-            if len(added_sec) > 0:
-                changes_sec["added"] = added_sec
-            if len(deleted_sec) > 0:
-                changes_sec["deleted"] = deleted_sec
-            if len(modified_sec) > 0:
-                changes_sec["modified"] = modified_sec
+        for d_id in DEPTS:
+            old_cursos = data.get(d_id, {}).keys()
+            new_cursos = new_data.get(d_id, {}).keys()
+            ocs = set(old_cursos)
+            ncs = set(new_cursos)
+            added = [x for x in new_cursos if x not in ocs]
+            deleted = [x for x in old_cursos if x not in ncs]
+            inter = [x for x in old_cursos if x in ncs]
+            modified = {}
+            d_data = data[d_id]
+            d_new_data = new_data[d_id]
+            for c_id in inter:
+                mods = {}
+                if d_data[c_id]["nombre"] != d_new_data[c_id]["nombre"]:
+                    mods["nombre"] = [d_data[c_id]["nombre"], d_new_data[c_id]["nombre"]]
+                old_secciones = set(d_data[c_id]["secciones"].keys())
+                new_secciones = set(d_new_data[c_id]["secciones"].keys())
+                changes_sec = {}
+                added_sec = new_secciones - old_secciones
+                deleted_sec = old_secciones - new_secciones
+                inter_sec = old_secciones & new_secciones
+                modified_sec = {}
+                for s_id in inter_sec:
+                    mods_sec = {}
+                    s_id = str(s_id)
+                    if d_data[c_id]["secciones"][s_id]["profesores"] != d_new_data[c_id]["secciones"][s_id]["profesores"]:
+                        mods_sec["profesores"] = [d_data[c_id]["secciones"][s_id]["profesores"],
+                                                  d_new_data[c_id]["secciones"][s_id]["profesores"]]
+                    if d_data[c_id]["secciones"][s_id]["cupos"] != d_new_data[c_id]["secciones"][s_id]["cupos"]:
+                        mods_sec["cupos"] = [d_data[c_id]["secciones"][s_id]["cupos"],
+                                             d_new_data[c_id]["secciones"][s_id]["cupos"]]
+                    if d_data[c_id]["secciones"][s_id]["horarios"] != d_new_data[c_id]["secciones"][s_id]["horarios"]:
+                        mods_sec["horarios"] = [d_data[c_id]["secciones"][s_id]["horarios"],
+                                                d_new_data[c_id]["secciones"][s_id]["horarios"]]
+                    if len(mods_sec) > 0:
+                        modified_sec[s_id] = mods_sec
 
-            if len(changes_sec) > 0:
-                mods["secciones"] = changes_sec
+                if len(added_sec) > 0:
+                    changes_sec["added"] = added_sec
+                if len(deleted_sec) > 0:
+                    changes_sec["deleted"] = deleted_sec
+                if len(modified_sec) > 0:
+                    changes_sec["modified"] = modified_sec
 
-            if len(mods) > 0:
-                modified[c_id] = mods
+                if len(changes_sec) > 0:
+                    mods["secciones"] = changes_sec
 
-        if added or deleted or modified:
-            all_changes[d_id] = {}
-            if added:
-                all_changes[d_id]["added"] = added
-            if deleted:
-                all_changes[d_id]["deleted"] = deleted
-            if modified:
-                all_changes[d_id]["modified"] = modified
+                if len(mods) > 0:
+                    modified[c_id] = mods
 
-    if len(all_changes) > 0:
-        logger.info("Changes detected on %s", str([x for x in all_changes]))
-        notify_changes(all_changes, context)
-    else:
-        logger.info("No changes detected")
-    data = new_data
-    last_check_time = datetime.now()
+            if added or deleted or modified:
+                all_changes[d_id] = {}
+                if added:
+                    all_changes[d_id]["added"] = added
+                if deleted:
+                    all_changes[d_id]["deleted"] = deleted
+                if modified:
+                    all_changes[d_id]["modified"] = modified
+
+        if len(all_changes) > 0:
+            logger.info("Changes detected on %s", str([x for x in all_changes]))
+            notify_changes(all_changes, context)
+        else:
+            logger.info("No changes detected")
+        data = new_data
+        last_check_time = datetime.now()
+    except Exception as e:
+        logger.exception("Uncaught exception occurred:")
+        try_msg(context.bot,
+                chat_id=admin_ids[0],
+                text="Ayuda, ocurrió un error y no supe qué hacer uwu.\n{}: {}".format(str(type(e).__name__), str(e)))
 
 
 def notify_changes(all_changes, context):
-    chats_data = context.job.context.chat_data
+    chats_data = dp.chat_data
     changes_dict = {}
     for d_id in all_changes:
         changes_str = changes_to_string(all_changes[d_id], d_id)
@@ -193,13 +208,13 @@ def notify_changes(all_changes, context):
         dept_matches = [x for x in subscribed_deptos if x in all_changes]
         curso_matches = [x for x in subscribed_cursos if (x[0] in all_changes and x[1] in all_changes[x[0]])]
         if dept_matches or curso_matches:
-            try_msg(context.bot, attempts=2,
+            try_msg(context.bot,
                     parse_mode="HTML",
                     chat_id=chat_id,
                     text="\U00002757 ¡He detectado cambios en tus suscripciones!\n"
                          "<i>Último chequeo {}</i>".format(last_check_time.strftime("%H:%M:%S")))
             for d_id in dept_matches:
-                try_msg(context.bot, attempts=2,
+                try_msg(context.bot,
                         chat_id=chat_id,
                         parse_mode="HTML",
                         disable_web_page_preview=True,
@@ -223,7 +238,7 @@ def notify_changes(all_changes, context):
                 elif c_id in all_changes[d_id]["modified"]:
                     change_type_str = "Curso modificado:"
                     curso_changes_str = modified_curso_string(c_id, d_id, all_changes[d_id]["modified"][c_id])
-                try_msg(context.bot, attempts=2,
+                try_msg(context.bot,
                         chat_id=chat_id,
                         parse_mode="HTML",
                         disable_web_page_preview=True,
@@ -257,9 +272,8 @@ def deleted_curso_string(curso_id, depto_id):
 def modified_curso_string(curso_id, depto_id, curso_mods):
     result = ""
     if "nombre" in curso_mods:
-        result += "\U0001F4D8 <b>{}</b> _{}_\n_Renombrado:_ <b>{}</b>".format(curso_id,
-                                                                              curso_mods["nombre"][0],
-                                                                              curso_mods["nombre"][1])
+        result += "\U0001F4D8 <b>{}</b> <i>{}</i>\n<i>Renombrado:</i> <b>{}</b>\n"\
+            .format(curso_id, curso_mods["nombre"][0], curso_mods["nombre"][1])
     else:
         result += "\U0001F4D8 <b>{} {}</b>\n".format(curso_id, new_data[depto_id][curso_id]["nombre"])
     if "secciones" in curso_mods:
@@ -316,7 +330,7 @@ def changes_to_string(changes, depto_id):
     if len(deleted) > 0:
         changes_str += "\n<i>Cursos eliminados:</i>\n"
         for curso_id in deleted:
-            deleted_curso_string(curso_id, depto_id)
+            changes_str += deleted_curso_string(curso_id, depto_id)
     if len(modified) > 0:
         changes_str += "\n<i>Cursos modificados:</i>\n"
         for curso_id in modified:
@@ -627,14 +641,26 @@ def get_log(update, context):
 
 
 def get_chats_data(update, context):
-    pass
+    if int(update.message.from_user.id) in admin_ids:
+        logger.info("[Command /get_chats_data from admin %s]", update.message.from_user.id)
+        try:
+            db_path = path.relpath('db')
+            with open(db_path, 'rb') as logfile:
+                json_result = json.dumps(pickle.load(logfile), sort_keys=True, indent=4)
+            with tempfile.NamedTemporaryFile(delete=False, mode="w+t") as temp_file:
+                temp_filename = temp_file.name
+                temp_file.write(json_result)
+            with open(temp_filename, 'rb') as temp_doc:
+                context.bot.send_document(chat_id=update.message.from_user.id,
+                                          document=temp_doc,
+                                          filename="catalogobot_chat_data_{}.txt"
+                                          .format(datetime.now().strftime("%d%b%Y-%H%M%S")))
+            os.remove(temp_filename)
+        except Exception as e:
+            logger.exception(e)
 
 
 def main():
-    updater = Updater(token=token, use_context=True, persistence=persistence)
-    dp = updater.dispatcher
-    jq = updater.job_queue
-
     jq.run_repeating(check_catalog, interval=900, context=dp, name="job_check")
 
     dp.add_handler(CommandHandler('start', start))
@@ -646,8 +672,9 @@ def main():
     dp.add_handler(CommandHandler('deptos', deptos))
     dp.add_handler(CommandHandler('suscripciones', subscriptions))
     # Admin commands
-    dp.add_handler(CommandHandler('force_check', force_check))
-    dp.add_handler(CommandHandler('get_log', get_log))
+    dp.add_handler(CommandHandler('force_check', force_check, filters=Filters.user(admin_ids)))
+    dp.add_handler(CommandHandler('get_log', get_log, filters=Filters.user(admin_ids)))
+    dp.add_handler(CommandHandler('get_chats_data', get_chats_data, filters=Filters.user(admin_ids)))
 
     global data
     data = scrape_catalog()
