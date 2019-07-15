@@ -12,10 +12,9 @@ from requests import RequestException
 from telegram.ext import Updater, CommandHandler, Filters
 
 from config.auth import token, admin_ids
-from config.logger import logger
 from config.persistence import persistence
 from constants import *
-from utils import full_strip, parse_horario, horarios_to_string, try_msg
+from utils import *
 
 last_check_time = datetime.now()
 
@@ -117,9 +116,6 @@ def check_catalog(context):
             logger.error("Aborting check.")
             return
 
-        logger.info("Looking for changes...")
-
-
         all_changes = {}
 
         for d_id in DEPTS:
@@ -147,7 +143,8 @@ def check_catalog(context):
                 for s_id in inter_sec:
                     mods_sec = {}
                     s_id = str(s_id)
-                    if d_data[c_id]["secciones"][s_id]["profesores"] != d_new_data[c_id]["secciones"][s_id]["profesores"]:
+                    if d_data[c_id]["secciones"][s_id]["profesores"]\
+                            != d_new_data[c_id]["secciones"][s_id]["profesores"]:
                         mods_sec["profesores"] = [d_data[c_id]["secciones"][s_id]["profesores"],
                                                   d_new_data[c_id]["secciones"][s_id]["profesores"]]
                     if d_data[c_id]["secciones"][s_id]["cupos"] != d_new_data[c_id]["secciones"][s_id]["cupos"]:
@@ -207,7 +204,9 @@ def notify_changes(all_changes, context):
         subscribed_deptos = chats_data[int(chat_id)].setdefault("subscribed_deptos", [])
         subscribed_cursos = chats_data[int(chat_id)].setdefault("subscribed_cursos", [])
         dept_matches = [x for x in subscribed_deptos if x in all_changes]
-        curso_matches = [x for x in subscribed_cursos if (x[0] in all_changes and x[1] in all_changes[x[0]])]
+        curso_matches = [x for x in subscribed_cursos if (x[1] in all_changes[x[0]].get("added", []) or
+                                                          x[1] in all_changes[x[0]].get("deleted", []) or
+                                                          x[1] in all_changes[x[0]].get("modified", {}))]
         if dept_matches or curso_matches:
             try_msg(context.bot,
                     parse_mode="HTML",
@@ -215,40 +214,40 @@ def notify_changes(all_changes, context):
                     text="\U00002757 ¡He detectado cambios en tus suscripciones!\n"
                          "<i>Último chequeo {}</i>".format(last_check_time.strftime("%H:%M:%S")))
             for d_id in dept_matches:
-                try_msg(context.bot,
-                        chat_id=chat_id,
-                        parse_mode="HTML",
-                        disable_web_page_preview=True,
-                        text=("<b>Cambios en {}</b>"
-                              "\n{}\n"
-                              "<a href='https://ucampus.uchile.cl/m/fcfm_catalogo/?semestre={}{}&depto={}'>"
-                              "\U0001F50D Ver catálogo</a>"
-                              ).format(DEPTS[d_id][1], changes_dict[d_id], YEAR, SEMESTER, d_id)
-                        )
+                send_long_message(context.bot,
+                                  chat_id=chat_id,
+                                  parse_mode="HTML",
+                                  disable_web_page_preview=True,
+                                  text=("<b>Cambios en {}</b>"
+                                        "\n{}\n"
+                                        "<a href='https://ucampus.uchile.cl/m/fcfm_catalogo/?semestre={}{}&depto={}'>"
+                                        "\U0001F50D Ver catálogo</a>"
+                                        ).format(DEPTS[d_id][1], changes_dict[d_id], YEAR, SEMESTER, d_id)
+                                  )
             for d_c_id in curso_matches:
                 d_id = d_c_id[0]
                 c_id = d_c_id[1]
                 change_type_str = ""
                 curso_changes_str = ""
-                if c_id in all_changes[d_id]["added"]:
+                if c_id in all_changes[d_id].get("added", []):
                     change_type_str = "Curso añadido:"
                     curso_changes_str = added_curso_string(c_id, d_id)
-                elif c_id in all_changes[d_id]["deleted"]:
+                elif c_id in all_changes[d_id].get("deleted", []):
                     change_type_str = "Curso eliminado:"
                     curso_changes_str = deleted_curso_string(c_id, d_id)
-                elif c_id in all_changes[d_id]["modified"]:
+                elif c_id in all_changes[d_id].get("modified", {}):
                     change_type_str = "Curso modificado:"
                     curso_changes_str = modified_curso_string(c_id, d_id, all_changes[d_id]["modified"][c_id])
-                try_msg(context.bot,
-                        chat_id=chat_id,
-                        parse_mode="HTML",
-                        disable_web_page_preview=True,
-                        text=("<b>{}</b>"
-                              "\n{}\n"
-                              "<a href='https://ucampus.uchile.cl/m/fcfm_catalogo/?semestre={}{}&depto={}'>"
-                              "\U0001F50D Ver catálogo</a>"
-                              ).format(change_type_str, curso_changes_str, YEAR, SEMESTER, d_id)
-                        )
+                send_long_message(context.bot,
+                                  chat_id=chat_id,
+                                  parse_mode="HTML",
+                                  disable_web_page_preview=True,
+                                  text=("<b>{}</b>"
+                                        "\n{}\n"
+                                        "<a href='https://ucampus.uchile.cl/m/fcfm_catalogo/?semestre={}{}&depto={}'>"
+                                        "\U0001F50D Ver catálogo</a>"
+                                        ).format(change_type_str, curso_changes_str, YEAR, SEMESTER, d_id)
+                                  )
 
 
 def added_curso_string(curso_id, depto_id):
@@ -535,7 +534,7 @@ def unsubscribe_curso(update, context):
     logger.info("[Command /desuscribir_curso]")
     if context.args:
         deleted = []
-        notsuscribed = []
+        notsub = []
         failed = []
         failed_depto = []
         for arg in context.args:
@@ -552,16 +551,16 @@ def unsubscribe_curso(update, context):
                     deleted.append((d_arg, c_arg))
                     context.chat_data["subscribed_cursos"].remove((d_arg, c_arg))
                 else:
-                    notsuscribed.append((d_arg, c_arg))
+                    notsub.append((d_arg, c_arg))
             else:
                 failed_depto.append((d_arg, c_arg))
         response = ""
         if deleted:
             response += "\U0001F6D1 Dejaré de avisarte sobre cambios en:\n<i>{}</i>\n\n" \
                 .format("\n".join([("- " + x[1] + " de " + DEPTS[x[0]][1] + " ({})".format(x[0])) for x in deleted]))
-        if notsuscribed:
+        if notsub:
             response += "\U0001F44D No estás suscrito a\n<i>{}</i>\n\n" \
-                .format("\n".join([("- " + x[1] + " de " + DEPTS[x[0]][1] + " ({})".format(x[0])) for x in notsuscribed]))
+                .format("\n".join([("- " + x[1] + " de " + DEPTS[x[0]][1] + " ({})".format(x[0])) for x in notsub]))
         if failed_depto:
             response += "\U0001F914 No pude identificar ningún departamento asociado a:\n<i>{}</i>\n\n" \
                 .format("\n".join(["- " + x[0] for x in failed_depto]))
