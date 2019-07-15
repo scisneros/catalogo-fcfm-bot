@@ -637,7 +637,8 @@ def get_log(update, context):
         logger.info("[Command /get_log from admin %s]", update.message.from_user.id)
         context.bot.send_document(chat_id=update.message.from_user.id,
                                   document=open(path.relpath('bot.log'), 'rb'),
-                                  filename="CataLog")
+                                  filename="catalogobot_log_{}.txt"
+                                  .format(datetime.now().strftime("%d%b%Y-%H%M%S")))
 
 
 def get_chats_data(update, context):
