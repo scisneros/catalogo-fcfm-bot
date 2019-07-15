@@ -1,4 +1,5 @@
 from telegram import TelegramError, constants as tg_constants
+from telegram.error import BadRequest
 
 from config.logger import logger
 
@@ -44,6 +45,8 @@ def try_msg(bot, attempts=2, **params):
     for attempt in range(attempts):
         try:
             bot.send_message(**params)
+        except BadRequest as e:
+            logger.error("Messaging chat %s raised BadRequest: %s. Aborting message.", chat_id, e)
         except TelegramError as e:
             logger.error("[Attempt %s/%s] Messaging chat %s raised following error: %s: %s",
                          attempt + 1, attempts, chat_id, type(e).__name__, e)
