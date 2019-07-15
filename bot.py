@@ -212,7 +212,7 @@ def notify_changes(all_changes, context):
                     parse_mode="HTML",
                     chat_id=chat_id,
                     text="\U00002757 ¡He detectado cambios en tus suscripciones!\n"
-                         "<i>Último chequeo {}</i>".format(last_check_time.strftime("%H:%M:%S")))
+                         "<i>Desde el último chequeo a las {}</i>".format(last_check_time.strftime("%H:%M:%S")))
             for d_id in dept_matches:
                 send_long_message(context.bot,
                                   chat_id=chat_id,
