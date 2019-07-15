@@ -204,9 +204,10 @@ def notify_changes(all_changes, context):
         subscribed_deptos = chats_data[int(chat_id)].setdefault("subscribed_deptos", [])
         subscribed_cursos = chats_data[int(chat_id)].setdefault("subscribed_cursos", [])
         dept_matches = [x for x in subscribed_deptos if x in all_changes]
-        curso_matches = [x for x in subscribed_cursos if (x[1] in all_changes[x[0]].get("added", []) or
-                                                          x[1] in all_changes[x[0]].get("deleted", []) or
-                                                          x[1] in all_changes[x[0]].get("modified", {}))]
+        curso_matches = [x for x in subscribed_cursos if (x[0] in all_changes
+                                                          and (x[1] in all_changes[x[0]].get("added", []) or
+                                                               x[1] in all_changes[x[0]].get("deleted", []) or
+                                                               x[1] in all_changes[x[0]].get("modified", {})))]
         if dept_matches or curso_matches:
             try_msg(context.bot,
                     parse_mode="HTML",
@@ -666,9 +667,10 @@ def main():
     try:
         with open(path.relpath('excluded/catalogdata.json'), "r") as datajsonfile:
             data = json.load(datajsonfile)
+        logger.info("Data loaded from local, initial check for changes will be made")
         check_first = True
     except OSError:
-        logger.info("No local data was found, initial scraping will be made.")
+        logger.info("No local data was found, initial scraping will be made without checking for changes.")
         check_first = False
         data = scrape_catalog()
 
