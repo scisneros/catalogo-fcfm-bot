@@ -661,7 +661,17 @@ def get_chats_data(update, context):
 
 
 def main():
-    jq.run_repeating(check_catalog, interval=900, context=dp, name="job_check")
+    global data
+    try:
+        with open(path.relpath('excluded/catalogdata.json'), "r") as datajsonfile:
+            data = json.load(datajsonfile)
+        check_first = True
+    except OSError:
+        logger.info("No local data was found, initial scraping will be made.")
+        check_first = False
+        data = scrape_catalog()
+
+    jq.run_repeating(check_catalog, interval=900, first=(0 if check_first else None), name="job_check")
 
     dp.add_handler(CommandHandler('start', start))
     dp.add_handler(CommandHandler('stop', stop))
@@ -675,9 +685,6 @@ def main():
     dp.add_handler(CommandHandler('force_check', force_check, filters=Filters.user(admin_ids)))
     dp.add_handler(CommandHandler('get_log', get_log, filters=Filters.user(admin_ids)))
     dp.add_handler(CommandHandler('get_chats_data', get_chats_data, filters=Filters.user(admin_ids)))
-
-    global data
-    data = scrape_catalog()
 
     updater.start_polling()
     updater.idle()
