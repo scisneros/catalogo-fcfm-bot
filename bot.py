@@ -113,7 +113,7 @@ def check_catalog(context):
         try:
             new_data = scrape_catalog()
         except RequestException:
-            logger.error("Aborting check.")
+            logger.exception("Connection Error. Aborting check.")
             return
 
         all_changes = {}
