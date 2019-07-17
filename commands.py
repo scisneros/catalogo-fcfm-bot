@@ -1,4 +1,8 @@
-from datetime import timedelta
+import json
+import os
+import pickle
+import tempfile
+from datetime import timedelta, datetime
 
 from config.auth import admin_ids
 from config.logger import logger
@@ -202,7 +206,7 @@ def unsubscribe_curso(update, context):
     logger.info("[Command /desuscribir_curso]")
     if context.args:
         deleted = []
-        notsuscribed = []
+        notsub = []
         failed = []
         failed_depto = []
         for arg in context.args:
@@ -219,16 +223,16 @@ def unsubscribe_curso(update, context):
                     deleted.append((d_arg, c_arg))
                     context.chat_data["subscribed_cursos"].remove((d_arg, c_arg))
                 else:
-                    notsuscribed.append((d_arg, c_arg))
+                    notsub.append((d_arg, c_arg))
             else:
                 failed_depto.append((d_arg, c_arg))
         response = ""
         if deleted:
             response += "\U0001F6D1 Dejaré de avisarte sobre cambios en:\n<i>{}</i>\n\n" \
                 .format("\n".join([("- " + x[1] + " de " + DEPTS[x[0]][1] + " ({})".format(x[0])) for x in deleted]))
-        if notsuscribed:
+        if notsub:
             response += "\U0001F44D No estás suscrito a\n<i>{}</i>\n\n" \
-                .format("\n".join([("- " + x[1] + " de " + DEPTS[x[0]][1] + " ({})".format(x[0])) for x in notsuscribed]))
+                .format("\n".join([("- " + x[1] + " de " + DEPTS[x[0]][1] + " ({})".format(x[0])) for x in notsub]))
         if failed_depto:
             response += "\U0001F914 No pude identificar ningún departamento asociado a:\n<i>{}</i>\n\n" \
                 .format("\n".join(["- " + x[0] for x in failed_depto]))
@@ -298,3 +302,32 @@ def force_check(update, context):
         logger.info("[Command /force_check from admin %s]", update.message.from_user.id)
         job_check = context.job_queue.get_jobs_by_name("job_check")[0]
         job_check.run(job_check.context)
+
+
+def get_log(update, context):
+    if int(update.message.from_user.id) in admin_ids:
+        logger.info("[Command /get_log from admin %s]", update.message.from_user.id)
+        context.bot.send_document(chat_id=update.message.from_user.id,
+                                  document=open(os.path.relpath('bot.log'), 'rb'),
+                                  filename="catalogobot_log_{}.txt"
+                                  .format(datetime.now().strftime("%d%b%Y-%H%M%S")))
+
+
+def get_chats_data(update, context):
+    if int(update.message.from_user.id) in admin_ids:
+        logger.info("[Command /get_chats_data from admin %s]", update.message.from_user.id)
+        try:
+            db_path = os.path.relpath('db')
+            with open(db_path, 'rb') as logfile:
+                json_result = json.dumps(pickle.load(logfile), sort_keys=True, indent=4)
+            with tempfile.NamedTemporaryFile(delete=False, mode="w+t") as temp_file:
+                temp_filename = temp_file.name
+                temp_file.write(json_result)
+            with open(temp_filename, 'rb') as temp_doc:
+                context.bot.send_document(chat_id=update.message.from_user.id,
+                                          document=temp_doc,
+                                          filename="catalogobot_chat_data_{}.txt"
+                                          .format(datetime.now().strftime("%d%b%Y-%H%M%S")))
+            os.remove(temp_filename)
+        except Exception as e:
+            logger.exception(e)
