@@ -283,7 +283,7 @@ def modified_curso_string(curso_id, depto_id, curso_mods):
         if "deleted" in curso_mods["secciones"]:
             result += "    <i>Secciones eliminadas:</i>\n"
             for seccion_id in curso_mods["secciones"]["deleted"]:
-                seccion = new_data[depto_id][curso_id]["secciones"][seccion_id]
+                seccion = data[depto_id][curso_id]["secciones"][seccion_id]
                 profs = ", ".join(seccion["profesores"])
                 result += "    \U00002796 Secc. {} - {}\n".format(seccion_id, profs)
         if "modified" in curso_mods["secciones"]:
