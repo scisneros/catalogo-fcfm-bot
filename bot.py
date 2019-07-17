@@ -8,13 +8,14 @@ from bs4 import BeautifulSoup
 from requests import RequestException
 from telegram.ext import Updater, CommandHandler, Filters
 
+import data
+from commands import start, stop, subscribe_depto, subscribe_curso, unsubscribe_depto, unsubscribe_curso, deptos, \
+    subscriptions, force_check, get_log, get_chats_data
 from config.auth import token, admin_ids
+from config.logger import logger
 from config.persistence import persistence
-from commands import *
-from constants import *
-from utils import *
-from data import data, new_data, last_check_time
-
+from constants import DEPTS, YEAR, SEMESTER
+from utils import full_strip, try_msg, horarios_to_string, parse_horario, send_long_message
 
 updater = Updater(token=token, use_context=True, persistence=persistence)
 dp = updater.dispatcher
@@ -102,10 +103,9 @@ def scrape_catalog():
 
 def check_catalog(context):
     try:
-        global data, new_data, last_check_time
-
         try:
-            new_data = scrape_catalog()
+            with open("excluded/catalogdata2.json", "r") as datajsonfile:
+                data.new_data = json.load(datajsonfile)
         except RequestException:
             logger.exception("Connection Error. Aborting check.")
             return
@@ -113,16 +113,16 @@ def check_catalog(context):
         all_changes = {}
 
         for d_id in DEPTS:
-            old_cursos = data.get(d_id, {}).keys()
-            new_cursos = new_data.get(d_id, {}).keys()
+            old_cursos = data.current_data.get(d_id, {}).keys()
+            new_cursos = data.new_data.get(d_id, {}).keys()
             ocs = set(old_cursos)
             ncs = set(new_cursos)
             added = [x for x in new_cursos if x not in ocs]
             deleted = [x for x in old_cursos if x not in ncs]
             inter = [x for x in old_cursos if x in ncs]
             modified = {}
-            d_data = data[d_id]
-            d_new_data = new_data[d_id]
+            d_data = data.current_data[d_id]
+            d_new_data = data.new_data[d_id]
             for c_id in inter:
                 mods = {}
                 if d_data[c_id]["nombre"] != d_new_data[c_id]["nombre"]:
@@ -177,8 +177,8 @@ def check_catalog(context):
             notify_changes(all_changes, context)
         else:
             logger.info("No changes detected")
-        data = new_data
-        last_check_time = datetime.now()
+        data.current_data = data.new_data
+        data.last_check_time = datetime.now()
     except Exception as e:
         logger.exception("Uncaught exception occurred:")
         try_msg(context.bot,
@@ -207,7 +207,7 @@ def notify_changes(all_changes, context):
                     parse_mode="HTML",
                     chat_id=chat_id,
                     text="\U00002757 ¡He detectado cambios en tus suscripciones!\n"
-                         "<i>Desde el último chequeo a las {}</i>".format(last_check_time.strftime("%H:%M:%S")))
+                         "<i>Desde el último chequeo a las {}</i>".format(data.last_check_time.strftime("%H:%M:%S")))
             for d_id in dept_matches:
                 send_long_message(context.bot,
                                   chat_id=chat_id,
@@ -247,7 +247,7 @@ def notify_changes(all_changes, context):
 
 def added_curso_string(curso_id, depto_id):
     result = ""
-    curso = new_data[depto_id][curso_id]
+    curso = data.new_data[depto_id][curso_id]
     result += "\U0001F4D7 <b>{} {}</b>\n".format(curso_id, curso["nombre"])
     for seccion_id in curso["secciones"]:
         seccion = curso["secciones"][seccion_id]
@@ -259,7 +259,7 @@ def added_curso_string(curso_id, depto_id):
 
 def deleted_curso_string(curso_id, depto_id):
     result = ""
-    curso = data[depto_id][curso_id]
+    curso = data.current_data[depto_id][curso_id]
     result += "\U0001F4D9 <b>{} {}</b>\n".format(curso_id, curso["nombre"])
     return result
 
@@ -270,12 +270,12 @@ def modified_curso_string(curso_id, depto_id, curso_mods):
         result += "\U0001F4D8 <b>{}</b> <i>{}</i>\n<i>Renombrado:</i> <b>{}</b>\n"\
             .format(curso_id, curso_mods["nombre"][0], curso_mods["nombre"][1])
     else:
-        result += "\U0001F4D8 <b>{} {}</b>\n".format(curso_id, new_data[depto_id][curso_id]["nombre"])
+        result += "\U0001F4D8 <b>{} {}</b>\n".format(curso_id, data.new_data[depto_id][curso_id]["nombre"])
     if "secciones" in curso_mods:
         if "added" in curso_mods["secciones"]:
             result += "    <i>Secciones añadidas:</i>\n"
             for seccion_id in curso_mods["secciones"]["added"]:
-                seccion = data[depto_id][curso_id]["secciones"][seccion_id]
+                seccion = data.new_data[depto_id][curso_id]["secciones"][seccion_id]
                 profs = ", ".join(seccion["profesores"])
                 result += "    \U00002795 Secc. {} - {} - {} cupos\n".format(seccion_id, profs,
                                                                              seccion["cupos"])
@@ -283,7 +283,8 @@ def modified_curso_string(curso_id, depto_id, curso_mods):
         if "deleted" in curso_mods["secciones"]:
             result += "    <i>Secciones eliminadas:</i>\n"
             for seccion_id in curso_mods["secciones"]["deleted"]:
-                seccion = data[depto_id][curso_id]["secciones"][seccion_id]
+                print(" ".join([depto_id, curso_id, seccion_id]))
+                seccion = data.current_data[depto_id][curso_id]["secciones"][seccion_id]
                 profs = ", ".join(seccion["profesores"])
                 result += "    \U00002796 Secc. {} - {}\n".format(seccion_id, profs)
         if "modified" in curso_mods["secciones"]:
@@ -298,7 +299,7 @@ def modified_curso_string(curso_id, depto_id, curso_mods):
                     result += "        \U00002013 a: <b>{}</b>\n".format(
                         ", ".join(seccion_mods["profesores"][1]))
                 else:
-                    profs = ", ".join(new_data[depto_id][curso_id]["secciones"][seccion_id]["profesores"])
+                    profs = ", ".join(data.new_data[depto_id][curso_id]["secciones"][seccion_id]["profesores"])
                     result += "    \U00003030 <b>Sección {}</b> - {}\n".format(seccion_id, profs)
                 if "cupos" in seccion_mods:
                     result += "        Cambia cupos\n".format(seccion_id)
@@ -335,16 +336,15 @@ def changes_to_string(changes, depto_id):
 
 
 def main():
-    global data
     try:
         with open(path.relpath('excluded/catalogdata.json'), "r") as datajsonfile:
-            data = json.load(datajsonfile)
+            data.current_data = json.load(datajsonfile)
         logger.info("Data loaded from local, initial check for changes will be made")
         check_first = True
     except OSError:
         logger.info("No local data was found, initial scraping will be made without checking for changes.")
         check_first = False
-        data = scrape_catalog()
+        data.current_data = scrape_catalog()
 
     jq.run_repeating(check_catalog, interval=900, first=(0 if check_first else None), name="job_check")
 

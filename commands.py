@@ -7,7 +7,7 @@ from datetime import timedelta, datetime
 from config.auth import admin_ids
 from config.logger import logger
 from constants import DEPTS
-from data import last_check_time, data
+import data
 from utils import try_msg
 
 
@@ -17,7 +17,7 @@ def start(update, context):
         try_msg(context.bot,
                 chat_id=update.message.chat_id,
                 text="¡Mis avisos para este chat ya están activados! El próximo chequeo será apróximadamente a las "
-                     + (last_check_time + timedelta(seconds=900)).strftime("%H:%M") +
+                     + (data.last_check_time + timedelta(seconds=900)).strftime("%H:%M") +
                      ".\nRecuerda configurar los avisos de este chat usando /suscribir_depto o /suscribir_curso"
                 )
     else:
@@ -107,7 +107,7 @@ def subscribe_curso(update, context):
                     context.chat_data["subscribed_cursos"] = []
                 if (d_arg, c_arg) not in context.chat_data["subscribed_cursos"]:
                     context.chat_data["subscribed_cursos"].append((d_arg, c_arg))
-                    is_curso_known = c_arg in data[d_arg]
+                    is_curso_known = c_arg in data.current_data[d_arg]
                     if is_curso_known:
                         added.append((d_arg, c_arg))
                     else:
