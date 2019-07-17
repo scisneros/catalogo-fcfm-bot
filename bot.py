@@ -104,8 +104,7 @@ def scrape_catalog():
 def check_catalog(context):
     try:
         try:
-            with open("excluded/catalogdata2.json", "r") as datajsonfile:
-                data.new_data = json.load(datajsonfile)
+            data.new_data = scrape_catalog()
         except RequestException:
             logger.exception("Connection Error. Aborting check.")
             return
