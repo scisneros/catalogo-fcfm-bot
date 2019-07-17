@@ -13,11 +13,7 @@ from config.persistence import persistence
 from commands import *
 from constants import *
 from utils import *
-
-last_check_time = datetime.now()
-
-data = {}  # Lista de cursos de última consulta
-new_data = {}  # Lista de cursos de nueva consulta
+from data import data, new_data, last_check_time
 
 
 updater = Updater(token=token, use_context=True, persistence=persistence)
@@ -279,7 +275,7 @@ def modified_curso_string(curso_id, depto_id, curso_mods):
         if "added" in curso_mods["secciones"]:
             result += "    <i>Secciones añadidas:</i>\n"
             for seccion_id in curso_mods["secciones"]["added"]:
-                seccion = new_data[depto_id][curso_id]["secciones"][seccion_id]
+                seccion = data[depto_id][curso_id]["secciones"][seccion_id]
                 profs = ", ".join(seccion["profesores"])
                 result += "    \U00002795 Secc. {} - {} - {} cupos\n".format(seccion_id, profs,
                                                                              seccion["cupos"])
