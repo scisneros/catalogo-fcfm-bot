@@ -194,54 +194,62 @@ def notify_changes(all_changes, context):
 
     # for chat_id in admin_ids:  # DEBUG, send only to admin
     for chat_id in chats_data:
-        subscribed_deptos = chats_data[int(chat_id)].setdefault("subscribed_deptos", [])
-        subscribed_cursos = chats_data[int(chat_id)].setdefault("subscribed_cursos", [])
-        dept_matches = [x for x in subscribed_deptos if x in all_changes]
-        curso_matches = [x for x in subscribed_cursos if (x[0] in all_changes
-                                                          and (x[1] in all_changes[x[0]].get("added", []) or
-                                                               x[1] in all_changes[x[0]].get("deleted", []) or
-                                                               x[1] in all_changes[x[0]].get("modified", {})))]
-        if dept_matches or curso_matches:
+        try:
+            subscribed_deptos = chats_data[int(chat_id)].setdefault("subscribed_deptos", [])
+            subscribed_cursos = chats_data[int(chat_id)].setdefault("subscribed_cursos", [])
+            dept_matches = [x for x in subscribed_deptos if x in all_changes]
+            curso_matches = [x for x in subscribed_cursos if (x[0] in all_changes
+                                                              and (x[1] in all_changes[x[0]].get("added", []) or
+                                                                   x[1] in all_changes[x[0]].get("deleted", []) or
+                                                                   x[1] in all_changes[x[0]].get("modified", {})))]
+            if dept_matches or curso_matches:
+                try_msg(context.bot,
+                        parse_mode="HTML",
+                        chat_id=chat_id,
+                        text="\U00002757 ¡He detectado cambios en tus suscripciones!\n"
+                             "<i>Desde el último chequeo a las {}</i>".format(data.last_check_time.strftime("%H:%M:%S")))
+                for d_id in dept_matches:
+                    send_long_message(context.bot,
+                                      chat_id=chat_id,
+                                      parse_mode="HTML",
+                                      disable_web_page_preview=True,
+                                      text=("<b>Cambios en {}</b>"
+                                            "\n{}\n"
+                                            "<a href='https://ucampus.uchile.cl/m/fcfm_catalogo/?semestre={}{}&depto={}'>"
+                                            "\U0001F50D Ver catálogo</a>"
+                                            ).format(DEPTS[d_id][1], changes_dict[d_id], YEAR, SEMESTER, d_id)
+                                      )
+                for d_c_id in curso_matches:
+                    d_id = d_c_id[0]
+                    c_id = d_c_id[1]
+                    change_type_str = ""
+                    curso_changes_str = ""
+                    if c_id in all_changes[d_id].get("added", []):
+                        change_type_str = "Curso añadido:"
+                        curso_changes_str = added_curso_string(c_id, d_id)
+                    elif c_id in all_changes[d_id].get("deleted", []):
+                        change_type_str = "Curso eliminado:"
+                        curso_changes_str = deleted_curso_string(c_id, d_id)
+                    elif c_id in all_changes[d_id].get("modified", {}):
+                        change_type_str = "Curso modificado:"
+                        curso_changes_str = modified_curso_string(c_id, d_id, all_changes[d_id]["modified"][c_id])
+                    send_long_message(context.bot,
+                                      chat_id=chat_id,
+                                      parse_mode="HTML",
+                                      disable_web_page_preview=True,
+                                      text=("<b>{}</b>"
+                                            "\n{}\n"
+                                            "<a href='https://ucampus.uchile.cl/m/fcfm_catalogo/?semestre={}{}&depto={}'>"
+                                            "\U0001F50D Ver catálogo</a>"
+                                            ).format(change_type_str, curso_changes_str, YEAR, SEMESTER, d_id)
+                                      )
+        except Exception as e:
+            logger.exception("Uncaught exception occurred when notifying chat:")
             try_msg(context.bot,
-                    parse_mode="HTML",
-                    chat_id=chat_id,
-                    text="\U00002757 ¡He detectado cambios en tus suscripciones!\n"
-                         "<i>Desde el último chequeo a las {}</i>".format(data.last_check_time.strftime("%H:%M:%S")))
-            for d_id in dept_matches:
-                send_long_message(context.bot,
-                                  chat_id=chat_id,
-                                  parse_mode="HTML",
-                                  disable_web_page_preview=True,
-                                  text=("<b>Cambios en {}</b>"
-                                        "\n{}\n"
-                                        "<a href='https://ucampus.uchile.cl/m/fcfm_catalogo/?semestre={}{}&depto={}'>"
-                                        "\U0001F50D Ver catálogo</a>"
-                                        ).format(DEPTS[d_id][1], changes_dict[d_id], YEAR, SEMESTER, d_id)
-                                  )
-            for d_c_id in curso_matches:
-                d_id = d_c_id[0]
-                c_id = d_c_id[1]
-                change_type_str = ""
-                curso_changes_str = ""
-                if c_id in all_changes[d_id].get("added", []):
-                    change_type_str = "Curso añadido:"
-                    curso_changes_str = added_curso_string(c_id, d_id)
-                elif c_id in all_changes[d_id].get("deleted", []):
-                    change_type_str = "Curso eliminado:"
-                    curso_changes_str = deleted_curso_string(c_id, d_id)
-                elif c_id in all_changes[d_id].get("modified", {}):
-                    change_type_str = "Curso modificado:"
-                    curso_changes_str = modified_curso_string(c_id, d_id, all_changes[d_id]["modified"][c_id])
-                send_long_message(context.bot,
-                                  chat_id=chat_id,
-                                  parse_mode="HTML",
-                                  disable_web_page_preview=True,
-                                  text=("<b>{}</b>"
-                                        "\n{}\n"
-                                        "<a href='https://ucampus.uchile.cl/m/fcfm_catalogo/?semestre={}{}&depto={}'>"
-                                        "\U0001F50D Ver catálogo</a>"
-                                        ).format(change_type_str, curso_changes_str, YEAR, SEMESTER, d_id)
-                                  )
+                    chat_id=admin_ids[0],
+                    text="Ayuda, ocurrió un error al notificar y no supe qué hacer uwu.\n{}: {}"
+                    .format(str(type(e).__name__), str(e)))
+            logger.error("Notification process will continue regardless.")
 
 
 def added_curso_string(curso_id, depto_id):
