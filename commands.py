@@ -4,10 +4,11 @@ import pickle
 import tempfile
 from datetime import timedelta, datetime
 
+import data
 from config.auth import admin_ids
 from config.logger import logger
 from constants import DEPTS
-import data
+from data import jq, dp
 from utils import try_msg
 
 
@@ -300,8 +301,8 @@ def subscriptions(update, context):
 def force_check(update, context):
     if int(update.message.from_user.id) in admin_ids:
         logger.info("[Command /force_check from admin %s]", update.message.from_user.id)
-        job_check = context.job_queue.get_jobs_by_name("job_check")[0]
-        job_check.run(job_check.context)
+        job_check = jq.get_jobs_by_name("job_check")[0]
+        job_check.run(dp)
 
 
 def get_log(update, context):

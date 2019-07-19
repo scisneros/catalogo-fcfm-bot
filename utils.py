@@ -54,6 +54,7 @@ def try_msg(bot, attempts=2, **params):
         except ChatMigrated as e:
             logger.info("Chat %s migrated to supergroup %s. Updating in database.", chat_id, e.new_chat_id)
             dp.chat_data[e.new_chat_id] = dp.chat_data[chat_id]
+            params["chat_id"] = e.new_chat_id
             attempt -= 1
         except BadRequest as e:
             logger.error("Messaging chat %s raised BadRequest: %s. Aborting message.", chat_id, e)
@@ -68,6 +69,7 @@ def try_msg(bot, attempts=2, **params):
     if attempt > attempts:
         logger.error("Max attempts reached for chat %s. Aborting message and raising exception.", str(chat_id))
         raise
+
 
 def send_long_message(bot, **params):
     text = params.pop("text", "")
