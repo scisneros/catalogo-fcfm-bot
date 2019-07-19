@@ -6,20 +6,16 @@ from os import path
 import requests
 from bs4 import BeautifulSoup
 from requests import RequestException
-from telegram.ext import Updater, CommandHandler, Filters
+from telegram.ext import CommandHandler, Filters
 
 import data
 from commands import start, stop, subscribe_depto, subscribe_curso, unsubscribe_depto, unsubscribe_curso, deptos, \
     subscriptions, force_check, get_log, get_chats_data
-from config.auth import token, admin_ids
+from config.auth import admin_ids
 from config.logger import logger
-from config.persistence import persistence
 from constants import DEPTS, YEAR, SEMESTER
+from data import updater, dp, jq
 from utils import full_strip, try_msg, horarios_to_string, parse_horario, send_long_message
-
-updater = Updater(token=token, use_context=True, persistence=persistence)
-dp = updater.dispatcher
-jq = updater.job_queue
 
 
 # Ejemplo de estructura de data:
@@ -245,11 +241,11 @@ def notify_changes(all_changes, context):
                                       )
         except Exception as e:
             logger.exception("Uncaught exception occurred when notifying chat:")
+            logger.error("Notification process will continue regardless.")
             try_msg(context.bot,
                     chat_id=admin_ids[0],
                     text="Ayuda, ocurrió un error al notificar y no supe qué hacer uwu.\n{}: {}"
                     .format(str(type(e).__name__), str(e)))
-            logger.error("Notification process will continue regardless.")
 
 
 def added_curso_string(curso_id, depto_id):
@@ -290,7 +286,6 @@ def modified_curso_string(curso_id, depto_id, curso_mods):
         if "deleted" in curso_mods["secciones"]:
             result += "    <i>Secciones eliminadas:</i>\n"
             for seccion_id in curso_mods["secciones"]["deleted"]:
-                print(" ".join([depto_id, curso_id, seccion_id]))
                 seccion = data.current_data[depto_id][curso_id]["secciones"][seccion_id]
                 profs = ", ".join(seccion["profesores"])
                 result += "    \U00002796 Secc. {} - {}\n".format(seccion_id, profs)
