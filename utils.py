@@ -1,7 +1,8 @@
 from telegram import TelegramError, constants as tg_constants
-from telegram.error import BadRequest, Unauthorized
+from telegram.error import BadRequest, Unauthorized, ChatMigrated
 
 from config.logger import logger
+from data import dp
 
 
 def full_strip(st):
@@ -42,23 +43,29 @@ def horarios_to_string(horarios, indent):
 
 def try_msg(bot, attempts=2, **params):
     chat_id = params["chat_id"]
-    for attempt in range(attempts):
+    attempt = 1
+    while attempt <= attempts:
         try:
             bot.send_message(**params)
         except Unauthorized:
             break
+        except ChatMigrated as e:
+            logger.info("Chat %s migrated to supergroup %s. Updating in database.", chat_id, e.new_chat_id)
+            dp.chat_data[e.new_chat_id] = dp.chat_data[chat_id]
+            attempt -= 1
         except BadRequest as e:
             logger.error("Messaging chat %s raised BadRequest: %s. Aborting message.", chat_id, e)
             break
         except TelegramError as e:
             logger.error("[Attempt %s/%s] Messaging chat %s raised following error: %s: %s",
-                         attempt + 1, attempts, chat_id, type(e).__name__, e)
-            if attempt + 1 == attempts:
-                logger.error("Max attempts reached for chat %s. Aborting message and raising exception.", str(chat_id))
-                raise
+                         attempt, attempts, chat_id, type(e).__name__, e)
         else:
             break
+        attempt += 1
 
+    if attempt > attempts:
+        logger.error("Max attempts reached for chat %s. Aborting message and raising exception.", str(chat_id))
+        raise
 
 def send_long_message(bot, **params):
     text = params.pop("text", "")
