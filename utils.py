@@ -48,14 +48,16 @@ def try_msg(bot, attempts=2, **params):
         try:
             bot.send_message(**params)
         except Unauthorized:
-            break
+            logger.error("Chat %s blocked the bot. Aborting message and disabling for this chat.", chat_id)
+            dp.chat_data[chat_id]["enable"] = False
+            raise
         except ChatMigrated as e:
             logger.info("Chat %s migrated to supergroup %s. Updating in database.", chat_id, e.new_chat_id)
             dp.chat_data[e.new_chat_id] = dp.chat_data[chat_id]
             attempt -= 1
         except BadRequest as e:
             logger.error("Messaging chat %s raised BadRequest: %s. Aborting message.", chat_id, e)
-            break
+            raise
         except TelegramError as e:
             logger.error("[Attempt %s/%s] Messaging chat %s raised following error: %s: %s",
                          attempt, attempts, chat_id, type(e).__name__, e)

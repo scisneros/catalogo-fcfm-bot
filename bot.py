@@ -6,6 +6,7 @@ from os import path
 import requests
 from bs4 import BeautifulSoup
 from requests import RequestException
+from telegram.error import Unauthorized, BadRequest
 from telegram.ext import CommandHandler, Filters
 
 import data
@@ -239,6 +240,8 @@ def notify_changes(all_changes, context):
                                             "\U0001F50D Ver catálogo</a>"
                                             ).format(change_type_str, curso_changes_str, YEAR, SEMESTER, d_id)
                                       )
+        except (Unauthorized, BadRequest):
+            continue
         except Exception as e:
             logger.exception("Uncaught exception occurred when notifying chat:")
             logger.error("Notification process will continue regardless.")
@@ -246,6 +249,7 @@ def notify_changes(all_changes, context):
                     chat_id=admin_ids[0],
                     text="Ayuda, ocurrió un error al notificar y no supe qué hacer uwu.\n{}: {}"
                     .format(str(type(e).__name__), str(e)))
+            continue
 
 
 def added_curso_string(curso_id, depto_id):
