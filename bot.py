@@ -3,9 +3,8 @@ import sys
 from datetime import datetime
 from os import path
 
-import requests
+import grequests
 from bs4 import BeautifulSoup
-from requests import RequestException
 from telegram.error import Unauthorized, BadRequest
 from telegram.ext import CommandHandler, Filters
 
@@ -53,18 +52,21 @@ def scrape_catalog():
     result = {}
     cursos_cnt = 0
     secciones_cnt = 0
+
+    urls = []
+    for dept_id in DEPTS:
+        urls.append("https://ucampus.uchile.cl/m/fcfm_catalogo/?semestre={}{}&depto={}".format(YEAR, SEMESTER, dept_id))
+    requests_urls = (grequests.get(u) for u in urls)
+    responses = grequests.map(requests_urls,
+                              exception_handler=lambda rq, ex: logger.exception("Connection error. Aborting check."))
+
     i = 0
     for dept_id in DEPTS:
-        i += 1
+        response = responses[i]
+        i = i + 1
         dept_data = {}
-        url = "https://ucampus.uchile.cl/m/fcfm_catalogo/?semestre={}{}&depto={}".format(YEAR, SEMESTER, dept_id)
-        sys.stdout.write("\r Scraping catalog {} of {}".format(i, len(DEPTS)))
-        try:
-            response = requests.get(url)
-        except RequestException as e:
-            logger.error("Connection error: {}".format(e))
-            raise RequestException("Connection error on scraping")
         soup = BeautifulSoup(response.content, 'html.parser')
+
         for curso_tag in soup.find_all("div", class_="ramo"):
             cursos_cnt += 1
             curso_str = full_strip(curso_tag.find("h2").contents[0]).split(" ", 1)
@@ -89,8 +91,6 @@ def scrape_catalog():
 
         result[dept_id] = dept_data
 
-    sys.stdout.write("\nFinished scraping\n")
-
     with open(path.relpath('excluded/catalogdata.json'), "w") as datajsonfile:
         json.dump(result, datajsonfile, indent=4)
 
@@ -100,11 +100,7 @@ def scrape_catalog():
 
 def check_catalog(context):
     try:
-        try:
-            data.new_data = scrape_catalog()
-        except RequestException:
-            logger.exception("Connection Error. Aborting check.")
-            return
+        data.new_data = scrape_catalog()
 
         all_changes = {}
 
