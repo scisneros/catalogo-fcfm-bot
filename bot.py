@@ -3,8 +3,10 @@ import threading
 from datetime import datetime
 from os import path
 
-import grequests
 from bs4 import BeautifulSoup
+import asyncio
+import aiohttp
+import ssl
 from telegram.error import Unauthorized, BadRequest
 from telegram.ext import CommandHandler, Filters
 
@@ -47,6 +49,17 @@ from utils import full_strip, try_msg, horarios_to_string, parse_horario, notify
 #
 
 
+async def fetch(session, url):
+    async with session.get(url, ssl=ssl.SSLContext()) as response:
+        return await response.text()
+
+
+async def fetch_all(urls, loop):
+    async with aiohttp.ClientSession(loop=loop) as session:
+        results = await asyncio.gather(*[fetch(session, url) for url in urls], return_exceptions=True)
+        return results
+
+
 def scrape_catalog():
     logger.info("Scraping catalog...")
     result = {}
@@ -56,16 +69,16 @@ def scrape_catalog():
     urls = []
     for dept_id in DEPTS:
         urls.append("https://ucampus.uchile.cl/m/fcfm_catalogo/?semestre={}{}&depto={}".format(YEAR, SEMESTER, dept_id))
-    requests_urls = (grequests.get(u) for u in urls)
-    responses = grequests.map(requests_urls,
-                              exception_handler=lambda rq, ex: logger.exception("Connection error. Aborting check."))
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    responses = loop.run_until_complete(fetch_all(urls, loop))
 
     i = 0
     for dept_id in DEPTS:
         response = responses[i]
         i = i + 1
         dept_data = {}
-        soup = BeautifulSoup(response.content, 'html.parser')
+        soup = BeautifulSoup(response, 'html.parser')
 
         for curso_tag in soup.find_all("div", class_="ramo"):
             cursos_cnt += 1
