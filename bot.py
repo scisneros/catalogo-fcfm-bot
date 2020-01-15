@@ -104,7 +104,7 @@ def scrape_catalog():
 
         result[dept_id] = dept_data
 
-    with open(path.relpath('excluded/catalogdata.json'), "w") as datajsonfile:
+    with open(path.relpath('excluded/catalogdata-{}-{}.json'.format(YEAR, SEMESTER)), "w") as datajsonfile:
         json.dump(result, datajsonfile, indent=4)
 
     logger.info("Finished scraping, found %s cursos with %s secciones", cursos_cnt, secciones_cnt)
@@ -349,7 +349,7 @@ def changes_to_string(changes, depto_id):
 
 def main():
     try:
-        with open(path.relpath('excluded/catalogdata.json'), "r") as datajsonfile:
+        with open(path.relpath('excluded/catalogdata-{}-{}.json'.format(YEAR, SEMESTER)), "r") as datajsonfile:
             data.current_data = json.load(datajsonfile)
         logger.info("Data loaded from local, initial check for changes will be made")
         check_first = True
