@@ -124,7 +124,7 @@ def subscribe_curso(update, context):
         if unknown:
             response += "\U0001F4A1 Actualmente no tengo registros de:\n<i>{}</i>\n" \
                 .format("\n".join(["- " + (x[1] + " en " + DEPTS[x[0]][1] + " ({})".format(x[0])) for x in unknown]))
-            response += "Te avisaré si aparece algún curso con ese nombre en ese depto.\n\n"
+            response += "Te avisaré si aparece algún curso con ese código en ese depto.\n\n"
         if already:
             response += "\U0001F44D Ya estabas suscrito a:\n<i>{}</i>.\n\n" \
                 .format("\n".join(["- " + (x[1] + " de " + DEPTS[x[0]][1] + " ({})".format(x[0])) for x in already]))
@@ -147,7 +147,7 @@ def subscribe_curso(update, context):
             try_msg(context.bot,
                     chat_id=update.message.chat_id,
                     parse_mode="HTML",
-                    text="He registrado tus suscripciones ¡Pero los avisos para este chat están desactivados!.\n"
+                    text="He registrado tus suscripciones ¡Pero los avisos para este chat están desactivados!\n"
                          "Actívalos enviándome /start")
     else:
         try_msg(context.bot,
