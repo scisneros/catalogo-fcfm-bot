@@ -50,7 +50,7 @@ def try_msg(bot, attempts=2, **params):
         except Unauthorized:
             logger.error("Chat %s blocked the bot. Aborting message and disabling for this chat.", chat_id)
             dp.chat_data[chat_id]["enable"] = False
-            raise
+            break
         except ChatMigrated as e:
             logger.info("Chat %s migrated to supergroup %s. Updating in database.", chat_id, e.new_chat_id)
             dp.chat_data[e.new_chat_id] = dp.chat_data[chat_id]
@@ -67,8 +67,7 @@ def try_msg(bot, attempts=2, **params):
         attempt += 1
 
     if attempt > attempts:
-        logger.error("Max attempts reached for chat %s. Aborting message and raising exception.", str(chat_id))
-        raise
+        logger.error("Max attempts reached for chat %s. Aborting message.", str(chat_id))
 
 
 def send_long_message(bot, **params):
@@ -93,15 +92,16 @@ def notify_thread(context, chat_id, announce_message, deptos_messages, cursos_me
             parse_mode="HTML",
             chat_id=chat_id,
             text=announce_message)
-    for deptos_message in deptos_messages:
-        send_long_message(context.bot,
-                          chat_id=chat_id,
-                          parse_mode="HTML",
-                          disable_web_page_preview=True,
-                          text=deptos_message)
-    for curso_message in cursos_messages:
-        send_long_message(context.bot,
-                          chat_id=chat_id,
-                          parse_mode="HTML",
-                          disable_web_page_preview=True,
-                          text=curso_message)
+    if dp.chat_data[chat_id].get("enable", False):
+        for deptos_message in deptos_messages:
+            send_long_message(context.bot,
+                              chat_id=chat_id,
+                              parse_mode="HTML",
+                              disable_web_page_preview=True,
+                              text=deptos_message)
+        for curso_message in cursos_messages:
+            send_long_message(context.bot,
+                              chat_id=chat_id,
+                              parse_mode="HTML",
+                              disable_web_page_preview=True,
+                              text=curso_message)
