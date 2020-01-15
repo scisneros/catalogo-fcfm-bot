@@ -299,6 +299,9 @@ def subscriptions(update, context):
         result += "<b>Avisos por curso:</b>\n"
         result += "\n".join(sub_cursos_list)
         result += "\n\n"
+
+    if sub_deptos_list or sub_cursos_list:
+        result += "<i>Puedes desuscribirte con /desuscribir_depto y /desuscribir_curso.</i>"
     try_msg(context.bot,
             chat_id=update.message.chat_id,
             parse_mode="HTML",
