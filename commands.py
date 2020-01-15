@@ -281,9 +281,16 @@ def subscriptions(update, context):
     sub_cursos_list = ["- <b>({}-{})</b>    <i>{} en {} {}</i>"
                            .format(x[0], x[1], x[1], DEPTS[x[0]][0], DEPTS[x[0]][1]) for x in subscribed_cursos]
 
-    result = "Actualmente doy los siguientes avisos para este chat:\n\n"
-    result += "<b>Avisos activados:</b> <i>{}</i>\n\n"\
-        .format("Sí \U00002714" if context.chat_data.get("enable", False) else "No \U0000274C")
+    result = "<b>Avisos activados:</b> <i>{}</i>\n\n" \
+        .format("Sí \U00002714 (Detener: /stop)" if context.chat_data.get("enable", False)
+                             else "No \U0000274C (Activar: /start)")
+
+    if sub_deptos_list or sub_cursos_list:
+        result += "Actualmente doy los siguientes avisos para este chat:\n\n"
+    else:
+        result += "Actualmente no tienes suscripciones a ningún departamento o curso.\n" \
+                  "Suscribe avisos con /suscribir_depto o /suscribir_curso."
+
     if sub_deptos_list:
         result += "<b>Avisos por departamento:</b>\n"
         result += "\n".join(sub_deptos_list)
@@ -332,3 +339,19 @@ def get_chats_data(update, context):
             os.remove(temp_filename)
         except Exception as e:
             logger.exception(e)
+
+
+def force_notification(update, context):
+    if int(update.message.from_user.id) in admin_ids:
+        logger.info("[Command /get_chats_data from admin %s]", update.message.from_user.id)
+        chats_data = dp.chat_data
+        if context.args:
+            message = update.message.text
+            message = message[message.index(" ")+1:].replace("\\", "")
+            for chat_id in chats_data:
+                try_msg(context.bot,
+                        chat_id=chat_id,
+                        force=True,
+                        text=message,
+                        parse_mode="Markdown",
+                        )

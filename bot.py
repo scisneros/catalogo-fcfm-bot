@@ -12,7 +12,7 @@ from telegram.ext import CommandHandler, Filters
 
 import data
 from commands import start, stop, subscribe_depto, subscribe_curso, unsubscribe_depto, unsubscribe_curso, deptos, \
-    subscriptions, force_check, get_log, get_chats_data
+    subscriptions, force_check, get_log, get_chats_data, force_notification
 from config.auth import admin_ids
 from config.logger import logger
 from constants import DEPTS, YEAR, SEMESTER
@@ -373,6 +373,7 @@ def main():
     dp.add_handler(CommandHandler('force_check', force_check, filters=Filters.user(admin_ids)))
     dp.add_handler(CommandHandler('get_log', get_log, filters=Filters.user(admin_ids)))
     dp.add_handler(CommandHandler('get_chats_data', get_chats_data, filters=Filters.user(admin_ids)))
+    dp.add_handler(CommandHandler('force_notification', force_notification, filters=Filters.user(admin_ids)))
 
     updater.start_polling()
     updater.idle()
