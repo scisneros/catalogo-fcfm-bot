@@ -1,7 +1,6 @@
 __pycache__/
 venv
 
-/excluded/
 db
 bot.log
 auth.py
