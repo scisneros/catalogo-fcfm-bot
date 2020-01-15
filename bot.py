@@ -1,5 +1,5 @@
 import json
-import sys
+import threading
 from datetime import datetime
 from os import path
 
@@ -15,7 +15,7 @@ from config.auth import admin_ids
 from config.logger import logger
 from constants import DEPTS, YEAR, SEMESTER
 from data import updater, dp, jq
-from utils import full_strip, try_msg, horarios_to_string, parse_horario, send_long_message
+from utils import full_strip, try_msg, horarios_to_string, parse_horario, notify_thread
 
 
 # Ejemplo de estructura de data:
@@ -129,7 +129,7 @@ def check_catalog(context):
                 for s_id in inter_sec:
                     mods_sec = {}
                     s_id = str(s_id)
-                    if d_data[c_id]["secciones"][s_id]["profesores"]\
+                    if d_data[c_id]["secciones"][s_id]["profesores"] \
                             != d_new_data[c_id]["secciones"][s_id]["profesores"]:
                         mods_sec["profesores"] = [d_data[c_id]["secciones"][s_id]["profesores"],
                                                   d_new_data[c_id]["secciones"][s_id]["profesores"]]
@@ -195,23 +195,20 @@ def notify_changes(all_changes, context):
                                                               and (x[1] in all_changes[x[0]].get("added", []) or
                                                                    x[1] in all_changes[x[0]].get("deleted", []) or
                                                                    x[1] in all_changes[x[0]].get("modified", {})))]
+
+            announce_message = ("\U00002757 ¡He detectado cambios en tus suscripciones!\n"
+                                "<i>Desde el último chequeo a las {}</i>".format(
+                data.last_check_time.strftime("%H:%M:%S")))
             if dept_matches or curso_matches:
-                try_msg(context.bot,
-                        parse_mode="HTML",
-                        chat_id=chat_id,
-                        text="\U00002757 ¡He detectado cambios en tus suscripciones!\n"
-                             "<i>Desde el último chequeo a las {}</i>".format(data.last_check_time.strftime("%H:%M:%S")))
+                deptos_messages = []
                 for d_id in dept_matches:
-                    send_long_message(context.bot,
-                                      chat_id=chat_id,
-                                      parse_mode="HTML",
-                                      disable_web_page_preview=True,
-                                      text=("<b>Cambios en {}</b>"
-                                            "\n{}\n"
-                                            "<a href='https://ucampus.uchile.cl/m/fcfm_catalogo/?semestre={}{}&depto={}'>"
-                                            "\U0001F50D Ver catálogo</a>"
-                                            ).format(DEPTS[d_id][1], changes_dict[d_id], YEAR, SEMESTER, d_id)
-                                      )
+                    deptos_messages.append("<b>Cambios en {}</b>"
+                                           "\n{}\n"
+                                           "<a href='https://ucampus.uchile.cl/m/fcfm_catalogo/"
+                                           "?semestre={}{}&depto={}'>"
+                                           "\U0001F50D Ver catálogo</a>"
+                                           .format(DEPTS[d_id][1], changes_dict[d_id], YEAR, SEMESTER, d_id))
+                cursos_messages = []
                 for d_c_id in curso_matches:
                     d_id = d_c_id[0]
                     c_id = d_c_id[1]
@@ -226,16 +223,16 @@ def notify_changes(all_changes, context):
                     elif c_id in all_changes[d_id].get("modified", {}):
                         change_type_str = "Curso modificado:"
                         curso_changes_str = modified_curso_string(c_id, d_id, all_changes[d_id]["modified"][c_id])
-                    send_long_message(context.bot,
-                                      chat_id=chat_id,
-                                      parse_mode="HTML",
-                                      disable_web_page_preview=True,
-                                      text=("<b>{}</b>"
-                                            "\n{}\n"
-                                            "<a href='https://ucampus.uchile.cl/m/fcfm_catalogo/?semestre={}{}&depto={}'>"
-                                            "\U0001F50D Ver catálogo</a>"
-                                            ).format(change_type_str, curso_changes_str, YEAR, SEMESTER, d_id)
-                                      )
+                        cursos_messages.append("<b>{}</b>"
+                                               "\n{}\n"
+                                               "<a href='https://ucampus.uchile.cl/m/fcfm_catalogo/"
+                                               "?semestre={}{}&depto={}'>"
+                                               "\U0001F50D Ver catálogo</a>"
+                                               .format(change_type_str, curso_changes_str, YEAR, SEMESTER, d_id))
+
+                t = threading.Thread(target=notify_thread, args=(context, chat_id,
+                                                                 announce_message, deptos_messages, cursos_messages))
+                t.start()
         except (Unauthorized, BadRequest):
             continue
         except Exception as e:
@@ -270,7 +267,7 @@ def deleted_curso_string(curso_id, depto_id):
 def modified_curso_string(curso_id, depto_id, curso_mods):
     result = ""
     if "nombre" in curso_mods:
-        result += "\U0001F4D8 <b>{}</b> <i>{}</i>\n<i>Renombrado:</i> <b>{}</b>\n"\
+        result += "\U0001F4D8 <b>{}</b> <i>{}</i>\n<i>Renombrado:</i> <b>{}</b>\n" \
             .format(curso_id, curso_mods["nombre"][0], curso_mods["nombre"][1])
     else:
         result += "\U0001F4D8 <b>{} {}</b>\n".format(curso_id, data.new_data[depto_id][curso_id]["nombre"])

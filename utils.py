@@ -81,8 +81,27 @@ def send_long_message(bot, **params):
                 slice_index = i
                 break
         sliced_text = text[:slice_index]
-        rest_text = text[slice_index+1:]
+        rest_text = text[slice_index + 1:]
         try_msg(bot, text=sliced_text, **params)
         send_long_message(bot, text=rest_text, **params)
     else:
         try_msg(bot, text=text, **params)
+
+
+def notify_thread(context, chat_id, announce_message, deptos_messages, cursos_messages):
+    try_msg(context.bot,
+            parse_mode="HTML",
+            chat_id=chat_id,
+            text=announce_message)
+    for deptos_message in deptos_messages:
+        send_long_message(context.bot,
+                          chat_id=chat_id,
+                          parse_mode="HTML",
+                          disable_web_page_preview=True,
+                          text=deptos_message)
+    for curso_message in cursos_messages:
+        send_long_message(context.bot,
+                          chat_id=chat_id,
+                          parse_mode="HTML",
+                          disable_web_page_preview=True,
+                          text=curso_message)
