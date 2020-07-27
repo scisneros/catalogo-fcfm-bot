@@ -346,7 +346,7 @@ def get_chats_data(update, context):
 
 def force_notification(update, context):
     if int(update.message.from_user.id) in admin_ids:
-        logger.info("[Command /get_chats_data from admin %s]", update.message.from_user.id)
+        logger.info("[Command /force_notification from admin %s]", update.message.from_user.id)
         chats_data = dp.chat_data
         if context.args:
             message = update.message.text
