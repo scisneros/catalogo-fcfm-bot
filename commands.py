@@ -18,7 +18,7 @@ def start(update, context):
         try_msg(context.bot,
                 chat_id=update.message.chat_id,
                 text="¡Mis avisos para este chat ya están activados! El próximo chequeo será apróximadamente a las "
-                     + (data.last_check_time + timedelta(seconds=900)).strftime("%H:%M") +
+                     + (data.last_check_time + timedelta(seconds=300)).strftime("%H:%M") +
                      ".\nRecuerda configurar los avisos de este chat usando /suscribir_depto o /suscribir_curso"
                 )
     else:
