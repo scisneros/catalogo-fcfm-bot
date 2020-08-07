@@ -91,10 +91,10 @@ def scrape_catalog():
                 seccion_data = seccion_tag.find_all("td")
                 seccion_id = seccion_tag["id"].split("-")[1]
                 seccion_profesores = []
-                for tag in seccion_data[1].find_all("h1"):
+                for tag in seccion_data[0].find("ul", class_="profes").find_all("h1"):
                     seccion_profesores.append(full_strip(tag.text))
-                seccion_cupos = full_strip(seccion_data[2].text)
-                seccion_horarios = parse_horario(seccion_data[4].contents)
+                seccion_cupos = full_strip(seccion_data[1].text)
+                seccion_horarios = parse_horario(seccion_data[3].contents)
                 seccion_dict = {"profesores": seccion_profesores,
                                 "cupos": seccion_cupos,
                                 "horarios": seccion_horarios}
