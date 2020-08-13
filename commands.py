@@ -99,6 +99,7 @@ def subscribe_curso(update, context):
         for arg in context.args:
             try:
                 (d_arg, c_arg) = arg.split("-")
+                c_arg = c_arg.upper()
             except ValueError:
                 failed.append(arg)
                 continue
