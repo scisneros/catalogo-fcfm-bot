@@ -51,8 +51,9 @@ def subscribe_depto(update, context):
                 if "subscribed_deptos" not in context.chat_data:
                     context.chat_data["subscribed_deptos"] = []
                 if arg not in context.chat_data["subscribed_deptos"]:
-                    added.append(arg)
                     context.chat_data["subscribed_deptos"].append(arg)
+                    data.persistence.flush()
+                    added.append(arg)
                 else:
                     already.append(arg)
             else:
@@ -109,6 +110,7 @@ def subscribe_curso(update, context):
                     context.chat_data["subscribed_cursos"] = []
                 if (d_arg, c_arg) not in context.chat_data["subscribed_cursos"]:
                     context.chat_data["subscribed_cursos"].append((d_arg, c_arg))
+                    data.persistence.flush()
                     is_curso_known = c_arg in data.current_data[d_arg]
                     if is_curso_known:
                         added.append((d_arg, c_arg))
@@ -168,8 +170,9 @@ def unsubscribe_depto(update, context):
         for arg in context.args:
             if arg in DEPTS:
                 if arg in context.chat_data["subscribed_deptos"]:
-                    deleted.append(arg)
                     context.chat_data["subscribed_deptos"].remove(arg)
+                    data.persistence.flush()
+                    deleted.append(arg)
                 else:
                     notsuscribed.append(arg)
             else:
@@ -222,8 +225,9 @@ def unsubscribe_curso(update, context):
                 if "subscribed_cursos" not in context.chat_data:
                     context.chat_data["subscribed_cursos"] = []
                 if (d_arg, c_arg) in context.chat_data["subscribed_cursos"]:
-                    deleted.append((d_arg, c_arg))
                     context.chat_data["subscribed_cursos"].remove((d_arg, c_arg))
+                    data.persistence.flush()
+                    deleted.append((d_arg, c_arg))
                 else:
                     notsub.append((d_arg, c_arg))
             else:
