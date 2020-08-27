@@ -3,6 +3,7 @@ import threading
 from datetime import datetime
 from os import path
 
+import requests
 from bs4 import BeautifulSoup
 import asyncio
 import aiohttp
@@ -348,6 +349,21 @@ def changes_to_string(changes, depto_id):
     return changes_str
 
 
+def check_results(context):
+    logger.info("Checking for results...")
+
+    response = requests.get("https://www.u-cursos.cl/ingenieria/2/novedades_institucion/")
+    soup = BeautifulSoup(response.content, 'html.parser')
+
+    for novedad in soup.find_all("div", class_="objeto"):
+        title = novedad.find("h1").find("a").contents[0]
+        print(title)
+
+
+def check_results_cmd(update, context):
+    check_results(context)
+
+
 def main():
     try:
         with open(path.relpath('excluded/catalogdata-{}-{}.json'.format(YEAR, SEMESTER)), "r") as datajsonfile:
@@ -374,6 +390,7 @@ def main():
     dp.add_handler(CommandHandler('get_log', get_log, filters=Filters.user(admin_ids)))
     dp.add_handler(CommandHandler('get_chats_data', get_chats_data, filters=Filters.user(admin_ids)))
     dp.add_handler(CommandHandler('force_notification', force_notification, filters=Filters.user(admin_ids)))
+    dp.add_handler(CommandHandler('check_results', check_results_cmd, filters=Filters.user(admin_ids)))
 
     updater.start_polling()
     updater.idle()
