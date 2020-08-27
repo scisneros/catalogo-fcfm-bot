@@ -376,6 +376,7 @@ def main():
         data.current_data = scrape_catalog()
 
     jq.run_repeating(check_catalog, interval=300, first=(1 if check_first else None), name="job_check")
+    jq.run_repeating(check_results, interval=60, name="job_results")
 
     dp.add_handler(CommandHandler('start', start))
     dp.add_handler(CommandHandler('stop', stop))
