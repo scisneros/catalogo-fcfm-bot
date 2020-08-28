@@ -363,3 +363,19 @@ def force_notification(update, context):
                         text=message,
                         parse_mode="Markdown",
                         )
+
+
+def notification(update, context):
+    if int(update.message.from_user.id) in admin_ids:
+        logger.info("[Command /notification from admin %s]", update.message.from_user.id)
+        chats_data = dp.chat_data
+        if context.args:
+            message = update.message.text
+            message = message[message.index(" ")+1:].replace("\\", "")
+            for chat_id in chats_data:
+                if chats_data[chat_id].get("enable", False):
+                    try_msg(context.bot,
+                            chat_id=chat_id,
+                            text=message,
+                            parse_mode="Markdown",
+                            )
