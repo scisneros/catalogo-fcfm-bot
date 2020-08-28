@@ -357,15 +357,29 @@ def check_results(context):
 
     for novedad in soup.find_all("div", class_="objeto"):
         title = novedad.find("h1").find("a").contents[0]
-        title = title.lower()
-        if "resultados" in title and (
-                (("inscripción" in title or "inscripcion" in title) and ("académica" in title or "academica" in title)) or
-                (" ia" in title)
+        ltitle = title.lower()
+        if "resultados" in ltitle and (
+                (("inscripción" in ltitle or "inscripcion" in ltitle) and ("académica" in ltitle or "academica" in ltitle)) or
+                (" IA" in title)
         ):
             context.job.enabled = False
             config["is_checking_results"] = False
             with open(path.relpath('config/bot.json'), "w") as bot_config_file:
                 json.dump(config, bot_config_file, indent=4)
+
+            chats_data = dp.chat_data
+            message = ("\U0001F575 ¡Detecté una Novedad sobre los resultados de la Inscripción Académica!\n"
+                       "Título: <strong>{}</strong>\n\n"
+                       "<a href='https://www.u-cursos.cl/ingenieria/2/novedades_institucion/'>"
+                       "\U0001F381 Ver Novedades</a>".format(title))
+            for chat_id in chats_data:
+                if chats_data[chat_id].get("enable", False):
+                    try_msg(context.bot,
+                            chat_id=chat_id,
+                            text=message,
+                            parse_mode="HTML",
+                            disable_web_page_preview=True,
+                            )
 
 
 def check_results_cmd(update, context):
@@ -378,6 +392,10 @@ def enable_check_results_cmd(update, context):
     config["is_checking_results"] = not current
     with open(path.relpath('config/bot.json'), "w") as bot_config_file:
         json.dump(config, bot_config_file, indent=4)
+    try_msg(context.bot,
+            chat_id=admin_ids[0],
+            text="Check results: {}".format(str(config["is_checking_results"]))
+            )
 
 
 def main():
@@ -401,6 +419,7 @@ def main():
 
     jq.run_repeating(check_catalog, interval=300, first=(1 if check_first else None), name="job_check")
     data.job_check_results = jq.run_repeating(check_results, interval=60, name="job_results")
+    data.job_check_results.enabled = data.config["is_checking_results"]
 
     dp.add_handler(CommandHandler('start', start))
     dp.add_handler(CommandHandler('stop', stop))
