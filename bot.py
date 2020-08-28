@@ -17,7 +17,7 @@ from commands import start, stop, subscribe_depto, subscribe_curso, unsubscribe_
 from config.auth import admin_ids
 from config.logger import logger
 from constants import DEPTS, YEAR, SEMESTER
-from data import updater, dp, jq
+from data import updater, dp, jq, config
 from utils import full_strip, try_msg, horarios_to_string, parse_horario, notify_thread
 
 
@@ -357,18 +357,42 @@ def check_results(context):
 
     for novedad in soup.find_all("div", class_="objeto"):
         title = novedad.find("h1").find("a").contents[0]
-        print(title)
+        title = title.lower()
+        if "resultados" in title and (
+                (("inscripción" in title or "inscripcion" in title) and ("académica" in title or "academica" in title)) or
+                (" ia" in title)
+        ):
+            context.job.enabled = False
+            config["is_checking_results"] = False
+            with open(path.relpath('config/bot.json'), "w") as bot_config_file:
+                json.dump(config, bot_config_file, indent=4)
 
 
 def check_results_cmd(update, context):
     check_results(context)
 
 
+def enable_check_results_cmd(update, context):
+    current = data.job_check_results.enabled
+    data.job_check_results.enabled = not current
+    config["is_checking_results"] = not current
+    with open(path.relpath('config/bot.json'), "w") as bot_config_file:
+        json.dump(config, bot_config_file, indent=4)
+
+
 def main():
+    try:
+        with open(path.relpath('config/bot.json'), "r") as bot_config_file:
+            data.config = json.load(bot_config_file)
+        logger.info("Bot config loaded.")
+    except OSError:
+        logger.error("Bot config was not found. Can't initialize.")
+        return
+
     try:
         with open(path.relpath('excluded/catalogdata-{}-{}.json'.format(YEAR, SEMESTER)), "r") as datajsonfile:
             data.current_data = json.load(datajsonfile)
-        logger.info("Data loaded from local, initial check for changes will be made")
+        logger.info("Data loaded from local, initial check for changes will be made.")
         check_first = True
     except OSError:
         logger.info("No local data was found, initial scraping will be made without checking for changes.")
@@ -376,7 +400,7 @@ def main():
         data.current_data = scrape_catalog()
 
     jq.run_repeating(check_catalog, interval=300, first=(1 if check_first else None), name="job_check")
-    jq.run_repeating(check_results, interval=60, name="job_results")
+    data.job_check_results = jq.run_repeating(check_results, interval=60, name="job_results")
 
     dp.add_handler(CommandHandler('start', start))
     dp.add_handler(CommandHandler('stop', stop))
@@ -392,6 +416,7 @@ def main():
     dp.add_handler(CommandHandler('get_chats_data', get_chats_data, filters=Filters.user(admin_ids)))
     dp.add_handler(CommandHandler('force_notification', force_notification, filters=Filters.user(admin_ids)))
     dp.add_handler(CommandHandler('check_results', check_results_cmd, filters=Filters.user(admin_ids)))
+    dp.add_handler(CommandHandler('enable_check_results', enable_check_results_cmd, filters=Filters.user(admin_ids)))
 
     updater.start_polling()
     updater.idle()
