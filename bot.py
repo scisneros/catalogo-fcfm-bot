@@ -355,32 +355,34 @@ def check_results(context):
     response = requests.get("https://www.u-cursos.cl/ingenieria/2/novedades_institucion/")
     soup = BeautifulSoup(response.content, 'html.parser')
 
-    for novedad in soup.find_all("div", class_="objeto"):
-        title = novedad.find("h1").find("a").contents[0]
-        ltitle = title.lower()
-        if "resultados" in ltitle and (
-                ("modifica" in ltitle) or
-                ("modificación" in ltitle) or
-                ("modificacion" in ltitle)
-        ):
-            context.job.enabled = False
-            config["is_checking_results"] = False
-            with open(path.relpath('config/bot.json'), "w") as bot_config_file:
-                json.dump(config, bot_config_file, indent=4)
+    novedad = soup.find("div", class_="objeto")
+    title = novedad.find("h1").find("a").contents[0]
+    ltitle = title.lower()
+    if "resultados" in ltitle and (
+            ("modifica" in ltitle) or
+            ("modificación" in ltitle) or
+            ("modificacion" in ltitle)
+    ):
+        context.job.enabled = False
+        config["is_checking_results"] = False
+        with open(path.relpath('config/bot.json'), "w") as bot_config_file:
+            json.dump(config, bot_config_file, indent=4)
 
-            chats_data = dp.chat_data
-            message = ("\U0001F575 ¡Detecté una Novedad sobre los resultados de la Inscripción Académica!\n"
-                       "Título: <strong>{}</strong>\n\n"
-                       "<a href='https://www.u-cursos.cl/ingenieria/2/novedades_institucion/'>"
-                       "\U0001F381 Ver Novedades</a>".format(title))
-            for chat_id in chats_data:
-                if chats_data[chat_id].get("enable", False):
-                    try_msg(context.bot,
-                            chat_id=chat_id,
-                            text=message,
-                            parse_mode="HTML",
-                            disable_web_page_preview=True,
-                            )
+        chats_data = dp.chat_data
+        message = ("\U0001F575 ¡Detecté una Novedad sobre los resultados de la Inscripción Académica!\n"
+                   "Título: <strong>{}</strong>\n\n"
+                   "<a href='https://ucampus.uchile.cl/m/fcfm_ia/resultados'>"
+                   "\U0001F50D Ver resultados IA</a>\n"
+                   "<a href='https://www.u-cursos.cl/ingenieria/2/novedades_institucion'>"
+                   "\U0001F381 Ver Novedades</a>".format(title))
+        for chat_id in chats_data:
+            if chats_data[chat_id].get("enable", False):
+                try_msg(context.bot,
+                        chat_id=chat_id,
+                        text=message,
+                        parse_mode="HTML",
+                        disable_web_page_preview=True,
+                        )
 
 
 def check_results_cmd(update, context):
