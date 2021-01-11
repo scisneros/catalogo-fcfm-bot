@@ -359,9 +359,8 @@ def check_results(context):
     title = novedad.find("h1").find("a").contents[0]
     ltitle = title.lower()
     if "resultados" in ltitle and (
-            ("modifica" in ltitle) or
-            ("modificación" in ltitle) or
-            ("modificacion" in ltitle)
+        (("inscripción" in ltitle or "inscripcion" in ltitle) and ("académica" in ltitle or "academica" in ltitle)) or
+        (" IA" in title)
     ):
         context.job.enabled = False
         config["is_checking_results"] = False
