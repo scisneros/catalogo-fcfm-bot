@@ -211,9 +211,6 @@ def notify_changes(all_changes, context):
                                                                        x[1] in all_changes[x[0]].get("deleted", []) or
                                                                        x[1] in all_changes[x[0]].get("modified", {})))]
 
-                announce_message = ("\U00002757 ¡He detectado cambios en tus suscripciones!\n"
-                                    "<i>Desde el último chequeo a las {}</i>".format(
-                    data.last_check_time.strftime("%H:%M:%S")))
                 if dept_matches or curso_matches:
                     deptos_messages = []
                     for d_id in dept_matches:
@@ -245,8 +242,7 @@ def notify_changes(all_changes, context):
                                                    "\U0001F50D Ver catálogo</a>"
                                                    .format(change_type_str, curso_changes_str, YEAR, SEMESTER, d_id))
 
-                    t = threading.Thread(target=notify_thread, args=(context, chat_id,
-                                                                     announce_message, deptos_messages, cursos_messages))
+                    t = threading.Thread(target=notify_thread, args=(context, chat_id, deptos_messages, cursos_messages))
                     t.start()
             except (Unauthorized, BadRequest):
                 continue

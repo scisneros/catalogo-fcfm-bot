@@ -87,11 +87,7 @@ def send_long_message(bot, **params):
         try_msg(bot, text=text, **params)
 
 
-def notify_thread(context, chat_id, announce_message, deptos_messages, cursos_messages):
-    try_msg(context.bot,
-            parse_mode="HTML",
-            chat_id=chat_id,
-            text=announce_message)
+def notify_thread(context, chat_id, deptos_messages, cursos_messages):
     if dp.chat_data[chat_id].get("enable", False):
         for deptos_message in deptos_messages:
             send_long_message(context.bot,
