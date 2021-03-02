@@ -17,7 +17,7 @@ def start(update, context):
     if context.chat_data.get("enable", False):
         try_msg(context.bot,
                 chat_id=update.message.chat_id,
-                text="¡Mis avisos para este chat ya están activados! El próximo chequeo será apróximadamente a las "
+                text="¡Mis avisos para este chat ya están activados! El próximo chequeo será aproximadamente a las "
                      + (data.last_check_time + timedelta(seconds=300)).strftime("%H:%M") +
                      ".\nRecuerda configurar los avisos de este chat usando /suscribir_depto o /suscribir_curso"
                 )
@@ -418,3 +418,21 @@ def enable_check_changes(update, context):
                 text=notif
                 )
         logger.info(notif)
+
+
+def admin_help(update, context):
+    if int(update.message.from_user.id) in admin_ids:
+        logger.info("[Command /help from admin %s]", update.message.from_user.id)
+        try_msg(context.bot,
+                chat_id=admin_ids[0],
+                text=
+                '/force_check\n'
+                '/get_log\n'
+                '/get_chats_data\n'
+                '/notification\n'
+                '/force_notification\n'
+                '/force_check_results\n'
+                '/enable_check_results\n'
+                '/enable_check_changes\n'
+                '/help\n'
+                )
