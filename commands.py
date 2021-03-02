@@ -420,6 +420,44 @@ def enable_check_changes(update, context):
         logger.info(notif)
 
 
+def changes_check_interval(update, context):
+    if int(update.message.from_user.id) in admin_ids:
+        logger.info("[Command /changes_check_interval from admin %s]", update.message.from_user.id)
+        if context.args:
+            try:
+                data.config["changes_check_interval"] = int(context.args[0])
+            except ValueError:
+                logger.error(f'{context.args[0]} is not a valid interval value')
+                return
+            with open(os.path.relpath('config/bot.json'), "w") as bot_config_file:
+                json.dump(data.config, bot_config_file, indent=4)
+            notif = "Changes check interval: {} seconds".format(str(data.config["changes_check_interval"]))
+            try_msg(context.bot,
+                    chat_id=admin_ids[0],
+                    text=notif
+                    )
+            logger.info(notif)
+
+
+def results_check_interval(update, context):
+    if int(update.message.from_user.id) in admin_ids:
+        logger.info("[Command /results_check_interval from admin %s]", update.message.from_user.id)
+        if context.args:
+            try:
+                data.config["results_check_interval"] = int(context.args[0])
+            except ValueError:
+                logger.error(f'{context.args[0]} is not a valid interval value')
+                return
+            with open(os.path.relpath('config/bot.json'), "w") as bot_config_file:
+                json.dump(data.config, bot_config_file, indent=4)
+            notif = "Results check interval: {} seconds".format(str(data.config["results_check_interval"]))
+            try_msg(context.bot,
+                    chat_id=admin_ids[0],
+                    text=notif
+                    )
+            logger.info(notif)
+
+
 def admin_help(update, context):
     if int(update.message.from_user.id) in admin_ids:
         logger.info("[Command /help from admin %s]", update.message.from_user.id)
@@ -434,5 +472,7 @@ def admin_help(update, context):
                 '/force_check_results\n'
                 '/enable_check_results\n'
                 '/enable_check_changes\n'
+                '/changes_check_interval\n'
+                '/results_check_interval\n'
                 '/help\n'
                 )

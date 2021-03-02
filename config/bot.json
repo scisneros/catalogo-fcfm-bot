@@ -1,4 +1,6 @@
 {
+    "changes_check_interval": 60,
+    "results_check_interval": 60,
     "is_checking_changes": false,
     "is_checking_results": false
 }

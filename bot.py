@@ -14,7 +14,8 @@ from telegram.ext import CommandHandler, Filters
 import data
 from commands import start, stop, subscribe_depto, subscribe_curso, unsubscribe_depto, unsubscribe_curso, deptos, \
     subscriptions, force_check, get_log, get_chats_data, force_notification, notification, force_check_results, \
-    enable_check_results, enable_check_changes, admin_help
+    enable_check_results, enable_check_changes, admin_help, changes_check_interval, \
+    results_check_interval
 from config.auth import admin_ids
 from config.logger import logger
 from constants import DEPTS, YEAR, SEMESTER
@@ -418,7 +419,8 @@ def main():
 
     try_msg(updater.bot,
             chat_id=admin_ids[0],
-            text=f'Bot iniciado. Config:\n{json.dumps(data.config, indent=2)}')
+            text=f'Bot iniciado. Config:\n<pre>{json.dumps(data.config, indent=2)}</pre>',
+            parse_mode="HTML")
 
     try:
         with open(path.relpath('excluded/catalogdata-{}-{}.json'.format(YEAR, SEMESTER)), "r") as datajsonfile:
@@ -431,10 +433,12 @@ def main():
         data.current_data = scrape_catalog()
         save_catalog()
 
-    data.job_check_changes = jq.run_repeating(check_catalog, interval=10, first=(1 if check_first else None),
+    data.job_check_changes = jq.run_repeating(check_catalog, interval=data.config["changes_check_interval"],
+                                              first=(1 if check_first else None),
                                               name="job_check")
     data.job_check_changes.enabled = data.config["is_checking_changes"]
-    data.job_check_results = jq.run_repeating(check_results, interval=60, name="job_results")
+    data.job_check_results = jq.run_repeating(check_results, interval=data.config["results_check_interval"],
+                                              name="job_results")
     data.job_check_results.enabled = data.config["is_checking_results"]
 
     dp.add_handler(CommandHandler('start', start))
@@ -454,6 +458,8 @@ def main():
     dp.add_handler(CommandHandler('force_check_results', force_check_results, filters=Filters.user(admin_ids)))
     dp.add_handler(CommandHandler('enable_check_results', enable_check_results, filters=Filters.user(admin_ids)))
     dp.add_handler(CommandHandler('enable_check_changes', enable_check_changes, filters=Filters.user(admin_ids)))
+    dp.add_handler(CommandHandler('changes_check_interval', changes_check_interval, filters=Filters.user(admin_ids)))
+    dp.add_handler(CommandHandler('results_check_interval', results_check_interval, filters=Filters.user(admin_ids)))
     dp.add_handler(CommandHandler('help', admin_help, filters=Filters.user(admin_ids)))
 
     updater.start_polling()
