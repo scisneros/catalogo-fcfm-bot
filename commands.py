@@ -320,6 +320,13 @@ def force_check(update, context):
         job_check.run(dp)
 
 
+def force_check_results(update, context):
+    if int(update.message.from_user.id) in admin_ids:
+        logger.info("[Command /force_check_results from admin %s]", update.message.from_user.id)
+        job_check = jq.get_jobs_by_name("job_results")[0]
+        job_check.run(dp)
+
+
 def get_log(update, context):
     if int(update.message.from_user.id) in admin_ids:
         logger.info("[Command /get_log from admin %s]", update.message.from_user.id)
@@ -379,3 +386,35 @@ def notification(update, context):
                             text=message,
                             parse_mode="Markdown",
                             )
+
+
+def enable_check_results(update, context):
+    if int(update.message.from_user.id) in admin_ids:
+        logger.info("[Command /enable_check_results from admin %s]", update.message.from_user.id)
+        current = data.job_check_results.enabled
+        data.job_check_results.enabled = not current
+        data.config["is_checking_results"] = not current
+        with open(os.path.relpath('config/bot.json'), "w") as bot_config_file:
+            json.dump(data.config, bot_config_file, indent=4)
+        notif = "Check results: {}".format(str(data.config["is_checking_results"]))
+        try_msg(context.bot,
+                chat_id=admin_ids[0],
+                text=notif
+                )
+        logger.info(notif)
+
+
+def enable_check_changes(update, context):
+    if int(update.message.from_user.id) in admin_ids:
+        logger.info("[Command /enable_check_changes from admin %s]", update.message.from_user.id)
+        current = data.job_check_changes.enabled
+        data.job_check_changes.enabled = not current
+        data.config["is_checking_changes"] = not current
+        with open(os.path.relpath('config/bot.json'), "w") as bot_config_file:
+            json.dump(data.config, bot_config_file, indent=4)
+        notif = "Check changes: {}".format(str(data.config["is_checking_changes"]))
+        try_msg(context.bot,
+                chat_id=admin_ids[0],
+                text=notif
+                )
+        logger.info(notif)

@@ -5,6 +5,10 @@ from config.logger import logger
 from data import dp
 
 
+class AllDeletedException(Exception):
+    pass
+
+
 def full_strip(st):
     return st.replace("\n", "").replace("\t", "").strip(" ")
 

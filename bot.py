@@ -1,24 +1,25 @@
+import asyncio
 import json
+import ssl
 import threading
 from datetime import datetime
 from os import path
 
+import aiohttp
 import requests
 from bs4 import BeautifulSoup
-import asyncio
-import aiohttp
-import ssl
 from telegram.error import Unauthorized, BadRequest
 from telegram.ext import CommandHandler, Filters
 
 import data
 from commands import start, stop, subscribe_depto, subscribe_curso, unsubscribe_depto, unsubscribe_curso, deptos, \
-    subscriptions, force_check, get_log, get_chats_data, force_notification, notification
+    subscriptions, force_check, get_log, get_chats_data, force_notification, notification, force_check_results, \
+    enable_check_results, enable_check_changes
 from config.auth import admin_ids
 from config.logger import logger
 from constants import DEPTS, YEAR, SEMESTER
-from data import updater, dp, jq, config
-from utils import full_strip, try_msg, horarios_to_string, parse_horario, notify_thread
+from data import updater, dp, jq
+from utils import full_strip, try_msg, horarios_to_string, parse_horario, notify_thread, AllDeletedException
 
 
 # Ejemplo de estructura de data:
@@ -59,6 +60,11 @@ async def fetch_all(urls, loop):
     async with aiohttp.ClientSession(loop=loop) as session:
         results = await asyncio.gather(*[fetch(session, url) for url in urls], return_exceptions=True)
         return results
+
+
+def save_catalog():
+    with open(path.relpath('excluded/catalogdata-{}-{}.json'.format(YEAR, SEMESTER)), "w") as datajsonfile:
+        json.dump(data.current_data, datajsonfile, indent=4)
 
 
 def scrape_catalog():
@@ -105,8 +111,8 @@ def scrape_catalog():
 
         result[dept_id] = dept_data
 
-    with open(path.relpath('excluded/catalogdata-{}-{}.json'.format(YEAR, SEMESTER)), "w") as datajsonfile:
-        json.dump(result, datajsonfile, indent=4)
+    if len(data.current_data) > 0 and cursos_cnt == 0:
+        raise AllDeletedException()
 
     logger.info("Finished scraping, found %s cursos with %s secciones", cursos_cnt, secciones_cnt)
     return result
@@ -119,8 +125,19 @@ def check_catalog(context):
         all_changes = {}
 
         for d_id in DEPTS:
-            old_cursos = data.current_data.get(d_id, {}).keys()
-            new_cursos = data.new_data.get(d_id, {}).keys()
+            old_cursos_data = data.current_data.get(d_id, {})
+            new_cursos_data = data.new_data.get(d_id, {})
+            if len(old_cursos_data) >= 3 and len(new_cursos_data) == 0:
+                data.new_data.update({d_id: old_cursos_data})
+                logger.exception(
+                    f'All cursos in ({d_id}) {DEPTS[d_id][1]} were deleted. Skipping this depto and keeping old information.')
+                try_msg(context.bot,
+                        chat_id=admin_ids[0],
+                        text=f'Todos los cursos de {DEPTS[d_id][1]} fueron borrados. Me saltaré este departamento y mantendré la información anterior.')
+                continue
+
+            old_cursos = old_cursos_data.keys()
+            new_cursos = new_cursos_data.keys()
             ocs = set(old_cursos)
             ncs = set(new_cursos)
             added = [x for x in new_cursos if x not in ocs]
@@ -185,6 +202,14 @@ def check_catalog(context):
             logger.info("No changes detected")
         data.current_data = data.new_data
         data.last_check_time = datetime.now()
+
+        save_catalog()
+
+    except AllDeletedException as e:
+        logger.error("All cursos were deleted. Aborting check and keeping old information.")
+        try_msg(context.bot,
+                chat_id=admin_ids[0],
+                text="Se han borrado todos los cursos. Se mantendrá la información anterior y se ignorará este check.")
     except Exception as e:
         logger.exception("Uncaught exception occurred:")
         try_msg(context.bot,
@@ -242,7 +267,8 @@ def notify_changes(all_changes, context):
                                                    "\U0001F50D Ver catálogo</a>"
                                                    .format(change_type_str, curso_changes_str, YEAR, SEMESTER, d_id))
 
-                    t = threading.Thread(target=notify_thread, args=(context, chat_id, deptos_messages, cursos_messages))
+                    t = threading.Thread(target=notify_thread,
+                                         args=(context, chat_id, deptos_messages, cursos_messages))
                     t.start()
             except (Unauthorized, BadRequest):
                 continue
@@ -355,13 +381,14 @@ def check_results(context):
     title = novedad.find("h1").find("a").contents[0]
     ltitle = title.lower()
     if "resultados" in ltitle and (
-        (("inscripción" in ltitle or "inscripcion" in ltitle) and ("académica" in ltitle or "academica" in ltitle)) or
-        (" IA" in title)
+            (("inscripción" in ltitle or "inscripcion" in ltitle) and (
+                    "académica" in ltitle or "academica" in ltitle)) or
+            (" IA" in title)
     ):
         context.job.enabled = False
-        config["is_checking_results"] = False
+        data.config["is_checking_results"] = False
         with open(path.relpath('config/bot.json'), "w") as bot_config_file:
-            json.dump(config, bot_config_file, indent=4)
+            json.dump(data.config, bot_config_file, indent=4)
 
         chats_data = dp.chat_data
         message = ("\U0001F575 ¡Detecté una Novedad sobre los resultados de la Inscripción Académica!\n"
@@ -378,22 +405,6 @@ def check_results(context):
                         parse_mode="HTML",
                         disable_web_page_preview=True,
                         )
-
-
-def check_results_cmd(update, context):
-    check_results(context)
-
-
-def enable_check_results_cmd(update, context):
-    current = data.job_check_results.enabled
-    data.job_check_results.enabled = not current
-    config["is_checking_results"] = not current
-    with open(path.relpath('config/bot.json'), "w") as bot_config_file:
-        json.dump(config, bot_config_file, indent=4)
-    try_msg(context.bot,
-            chat_id=admin_ids[0],
-            text="Check results: {}".format(str(config["is_checking_results"]))
-            )
 
 
 def main():
@@ -414,8 +425,11 @@ def main():
         logger.info("No local data was found, initial scraping will be made without checking for changes.")
         check_first = False
         data.current_data = scrape_catalog()
+        save_catalog()
 
-    jq.run_repeating(check_catalog, interval=60, first=(1 if check_first else None), name="job_check")
+    data.job_check_changes = jq.run_repeating(check_catalog, interval=10, first=(1 if check_first else None),
+                                              name="job_check")
+    data.job_check_changes.enabled = data.config["is_checking_changes"]
     data.job_check_results = jq.run_repeating(check_results, interval=60, name="job_results")
     data.job_check_results.enabled = data.config["is_checking_results"]
 
@@ -433,8 +447,9 @@ def main():
     dp.add_handler(CommandHandler('get_chats_data', get_chats_data, filters=Filters.user(admin_ids)))
     dp.add_handler(CommandHandler('notification', notification, filters=Filters.user(admin_ids)))
     dp.add_handler(CommandHandler('force_notification', force_notification, filters=Filters.user(admin_ids)))
-    dp.add_handler(CommandHandler('check_results', check_results_cmd, filters=Filters.user(admin_ids)))
-    dp.add_handler(CommandHandler('enable_check_results', enable_check_results_cmd, filters=Filters.user(admin_ids)))
+    dp.add_handler(CommandHandler('force_check_results', force_check_results, filters=Filters.user(admin_ids)))
+    dp.add_handler(CommandHandler('enable_check_results', enable_check_results, filters=Filters.user(admin_ids)))
+    dp.add_handler(CommandHandler('enable_check_changes', enable_check_changes, filters=Filters.user(admin_ids)))
 
     updater.start_polling()
     updater.idle()
