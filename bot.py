@@ -416,6 +416,10 @@ def main():
         logger.error("Bot config was not found. Can't initialize.")
         return
 
+    try_msg(updater.bot,
+            chat_id=admin_ids[0],
+            text=f'Bot iniciado. Config:\n{json.dumps(data.config, indent=2)}')
+
     try:
         with open(path.relpath('excluded/catalogdata-{}-{}.json'.format(YEAR, SEMESTER)), "r") as datajsonfile:
             data.current_data = json.load(datajsonfile)
