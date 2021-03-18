@@ -381,7 +381,7 @@ def check_results(context):
     novedad = soup.find("div", class_="objeto")
     title = novedad.find("h1").find("a").contents[0]
     ltitle = title.lower()
-    if "resultados" in ltitle and (
+    if "resultado" in ltitle and (
             ("modifica" in ltitle) or
             ("modificación" in ltitle) or
             ("modificacion" in ltitle)
