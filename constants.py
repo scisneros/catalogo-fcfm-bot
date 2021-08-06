@@ -1,5 +1,5 @@
 YEAR = "2021"
-SEMESTER = "1"  # 1: Otoño, 2: Primavera, 3: Verano
+SEMESTER = "2"  # 1: Otoño, 2: Primavera, 3: Verano
 
 DEPTS = {  # id: [Cód, Nombre]
     "12060003": ["AA", "Área para el Aprendizaje de la Ingeniería y Ciencias A2IC"],
