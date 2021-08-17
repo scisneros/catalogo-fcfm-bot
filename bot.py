@@ -20,7 +20,7 @@ from config.auth import admin_ids
 from config.logger import logger
 from constants import DEPTS, YEAR, SEMESTER
 from data import updater, dp, jq
-from utils import full_strip, try_msg, horarios_to_string, parse_horario, notify_thread, AllDeletedException
+from utils import full_strip, save_config, try_msg, horarios_to_string, parse_horario, notify_thread, AllDeletedException
 
 
 # Ejemplo de estructura de data:
@@ -385,8 +385,7 @@ def check_results(context):
         return
 
     data.config["last_novedad_id"] = novedad_id
-    with open(path.relpath('config/bot.json'), "w") as bot_config_file:
-        json.dump(data.config, bot_config_file, indent=4)
+    save_config()
     
     title = novedad.find("h1").find("a").contents[0]
     ltitle = title.lower()

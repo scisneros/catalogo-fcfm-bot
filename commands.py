@@ -9,7 +9,7 @@ from config.auth import admin_ids
 from config.logger import logger
 from constants import DEPTS
 from data import jq, dp
-from utils import try_msg
+from utils import save_config, try_msg
 
 
 def start(update, context):
@@ -394,8 +394,7 @@ def enable_check_results(update, context):
         current = data.job_check_results.enabled
         data.job_check_results.enabled = not current
         data.config["is_checking_results"] = not current
-        with open(os.path.relpath('config/bot.json'), "w") as bot_config_file:
-            json.dump(data.config, bot_config_file, indent=4)
+        save_config()
         notif = "Check results: {}".format(str(data.config["is_checking_results"]))
         try_msg(context.bot,
                 chat_id=admin_ids[0],
@@ -410,8 +409,7 @@ def enable_check_changes(update, context):
         current = data.job_check_changes.enabled
         data.job_check_changes.enabled = not current
         data.config["is_checking_changes"] = not current
-        with open(os.path.relpath('config/bot.json'), "w") as bot_config_file:
-            json.dump(data.config, bot_config_file, indent=4)
+        save_config()
         notif = "Check changes: {}".format(str(data.config["is_checking_changes"]))
         try_msg(context.bot,
                 chat_id=admin_ids[0],
@@ -429,8 +427,7 @@ def changes_check_interval(update, context):
             except ValueError:
                 logger.error(f'{context.args[0]} is not a valid interval value')
                 return
-            with open(os.path.relpath('config/bot.json'), "w") as bot_config_file:
-                json.dump(data.config, bot_config_file, indent=4)
+            save_config()
             notif = "Changes check interval: {} seconds".format(str(data.config["changes_check_interval"]))
             try_msg(context.bot,
                     chat_id=admin_ids[0],
@@ -448,8 +445,7 @@ def results_check_interval(update, context):
             except ValueError:
                 logger.error(f'{context.args[0]} is not a valid interval value')
                 return
-            with open(os.path.relpath('config/bot.json'), "w") as bot_config_file:
-                json.dump(data.config, bot_config_file, indent=4)
+            save_config()
             notif = "Results check interval: {} seconds".format(str(data.config["results_check_interval"]))
             try_msg(context.bot,
                     chat_id=admin_ids[0],

@@ -1,6 +1,9 @@
+import json
+import os
 from telegram import TelegramError, constants as tg_constants
 from telegram.error import BadRequest, Unauthorized, ChatMigrated
 
+import data
 from config.logger import logger
 from data import dp
 
@@ -105,3 +108,8 @@ def notify_thread(context, chat_id, deptos_messages, cursos_messages):
                               parse_mode="HTML",
                               disable_web_page_preview=True,
                               text=curso_message)
+
+
+def save_config():
+    with open(os.path.relpath('config/bot.json'), "w") as bot_config_file:
+        json.dump(data.config, bot_config_file, indent=4)
