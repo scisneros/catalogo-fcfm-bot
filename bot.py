@@ -384,7 +384,10 @@ def check_results(context):
     if "resultado" in ltitle and (
             ("modifica" in ltitle) or
             ("modificación" in ltitle) or
-            ("modificacion" in ltitle)
+            ("modificacion" in ltitle) or
+            (("inscripción" in ltitle or "inscripcion" in ltitle) and (
+                    "académica" in ltitle or "academica" in ltitle)) or
+            (" IA" in title)
     ):
         context.job.enabled = False
         data.config["is_checking_results"] = False
