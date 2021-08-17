@@ -2,5 +2,6 @@
     "changes_check_interval": 60,
     "results_check_interval": 60,
     "is_checking_changes": true,
-    "is_checking_results": true
+    "is_checking_results": true,
+    "last_novedad_id": "44934"
 }

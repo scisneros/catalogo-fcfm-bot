@@ -379,6 +379,15 @@ def check_results(context):
     soup = BeautifulSoup(response.content, 'html.parser')
 
     novedad = soup.find("div", class_="objeto")
+
+    novedad_id = novedad["data-id"]
+    if novedad_id == data.config["last_novedad_id"]:
+        return
+
+    data.config["last_novedad_id"] = novedad_id
+    with open(path.relpath('config/bot.json'), "w") as bot_config_file:
+        json.dump(data.config, bot_config_file, indent=4)
+    
     title = novedad.find("h1").find("a").contents[0]
     ltitle = title.lower()
     if "resultado" in ltitle and (
@@ -389,11 +398,6 @@ def check_results(context):
                     "académica" in ltitle or "academica" in ltitle)) or
             (" IA" in title)
     ):
-        context.job.enabled = False
-        data.config["is_checking_results"] = False
-        with open(path.relpath('config/bot.json'), "w") as bot_config_file:
-            json.dump(data.config, bot_config_file, indent=4)
-
         chats_data = dp.chat_data
         message = ("\U0001F575 ¡Detecté una Novedad sobre los resultados de la Inscripción Académica!\n"
                    "Título: <strong>{}</strong>\n\n"
